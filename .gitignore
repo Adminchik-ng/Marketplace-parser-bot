@@ -1,0 +1,12 @@
+gitvenv/
+.venv/
+.env
+.mypy_cache/
+__pycache__/
+.vscode/
+.DS_Store
+.redis_data/
+.postgres_data/
+.pgadmin_data/
+docker-compose.yml
+tz.md
