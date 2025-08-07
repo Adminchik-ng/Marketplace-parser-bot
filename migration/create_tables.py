@@ -4,7 +4,7 @@ import sys
 import logging
 
 from psycopg import AsyncConnection, Error
-from database.connection import get_pg_connection
+from connections.connection import get_pg_connection
 from config.config import Config, load_config
 
 config: Config = load_config()

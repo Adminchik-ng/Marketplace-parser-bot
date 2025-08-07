@@ -12,7 +12,7 @@ from bot.middlewares.database import DataBaseMiddleware
 from bot.middlewares.shadow_ban import ShadowBanMiddleware
 from bot.middlewares.statistics import ActivityCounterMiddleware
 from bot.locales.ru import RU
-from database import db
+from connections.connection import get_pg_pool
 from config.config import Config
 from redis.asyncio import Redis
 
@@ -42,7 +42,7 @@ async def main(config: Config) -> None:
     dp = Dispatcher(storage=storage)
 
     # Создаём пул соединений с Postgres
-    db_pool: psycopg_pool.AsyncConnectionPool = await db.connection.get_pg_pool(
+    db_pool: psycopg_pool.AsyncConnectionPool = await get_pg_pool(
         db_name=config.db.name,
         host=config.db.host,
         port=config.db.port,
