@@ -9,11 +9,10 @@ from bot.handlers.admin import admin_router
 # from bot.handlers.others import others_router
 from bot.handlers.user import user_router
 from bot.middlewares.database import DataBaseMiddleware
-# from bot.middlewares.lang_settings import LangSettingsMiddleware
 from bot.middlewares.shadow_ban import ShadowBanMiddleware
 from bot.middlewares.statistics import ActivityCounterMiddleware
 from bot.locales.ru import RU
-from database.connection import get_pg_pool
+from database import db
 from config.config import Config
 from redis.asyncio import Redis
 
@@ -43,7 +42,7 @@ async def main(config: Config) -> None:
     dp = Dispatcher(storage=storage)
 
     # Создаём пул соединений с Postgres
-    db_pool: psycopg_pool.AsyncConnectionPool = await get_pg_pool(
+    db_pool: psycopg_pool.AsyncConnectionPool = await db.connection.get_pg_pool(
         db_name=config.db.name,
         host=config.db.host,
         port=config.db.port,

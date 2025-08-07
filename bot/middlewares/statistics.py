@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
 from aiogram.types import Update, User
-from database import add_user_activity
+from database import db
 from psycopg import AsyncConnection
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,6 @@ class ActivityCounterMiddleware(BaseMiddleware):
             logger.error("No database connection found in middleware data.")
             raise RuntimeError("Missing database connection for activity logging.")
         
-        await add_user_activity(conn, user_id=user.id)
+        await db.activity.add_user_activity(conn, user_id=user.id)
 
         return result

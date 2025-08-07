@@ -1,5 +1,13 @@
-from .activity_table import *
-from .users_table import *  
-from .products_table import *
+from calendar import c
+from . import activity_table
+from . import users_table
+from . import products_table
+from . import connection    
 
-__all__ = ["activity_table", "users_table", "products_table"]
+class DBInterface:
+    users = users_table
+    activity = activity_table
+    products = products_table
+    connection = connection
+
+db = DBInterface()

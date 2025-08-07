@@ -8,11 +8,7 @@ from aiogram.filters import KICKED, ChatMemberUpdatedFilter, Command, CommandSta
 from aiogram.types import BotCommandScopeChat, ChatMemberUpdated, Message
 from bot.enums.roles import UserRole
 from bot.keyboards.menu_button import get_main_menu_commands
-from database import (
-    add_user,
-    change_user_alive_status,
-    get_user,
-)
+from database import db
 from psycopg.connection_async import AsyncConnection
 
 logger = logging.getLogger(__name__)
@@ -30,14 +26,14 @@ async def process_start_command(
     locales: dict[str, str], 
     admin_ids: list[int],
 ):
-    user_row = await get_user(conn, telegram_id=message.from_user.id)
+    user_row = await db.users.get_user(conn, telegram_id=message.from_user.id)
     if user_row is None:
         if message.from_user.id in admin_ids:
             user_role = UserRole.ADMIN
         else:
             user_role = UserRole.USER
 
-        await add_user(
+        await db.users.add_user(
             conn,
             telegram_id=message.from_user.id,
             username=message.from_user.username,
@@ -46,7 +42,7 @@ async def process_start_command(
         )
     else:
         user_role = UserRole(user_row.role)
-        await change_user_alive_status(
+        await db.users.change_user_alive_status(
             conn, 
             is_alive=True, 
             telegram_id=message.from_user.id, 
@@ -73,4 +69,4 @@ async def process_help_command(message: Message, locales: dict[str, str]):
 @user_router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=KICKED))
 async def process_user_blocked_bot(event: ChatMemberUpdated, conn: AsyncConnection):
     logger.info("User %d has blocked the bot", event.from_user.id)
-    await change_user_alive_status(conn, telegram_id=event.from_user.id, is_alive=False)
+    await db.users.change_user_alive_status(conn, telegram_id=event.from_user.id, is_alive=False)

@@ -3,7 +3,7 @@ from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update, User
-from database import get_user_banned_status_by_id
+from database import db
 from psycopg import AsyncConnection
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class ShadowBanMiddleware(BaseMiddleware):
             logger.error("Database connection not found in middleware data.")
             raise RuntimeError("Missing database connection for shadow ban check.")
         
-        user_banned_status = await get_user_banned_status_by_id(conn, user_id=user.id)
+        user_banned_status = await db.users.get_user_banned_status_by_id(conn, user_id=user.id)
 
         if user_banned_status:
             logger.warning("Shadow-banned user tried to interact: %d", user.id)
