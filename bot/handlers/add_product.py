@@ -5,6 +5,7 @@ from aiogram import Router, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
+from database import db
 
 from psycopg import AsyncConnection
 
@@ -138,14 +139,7 @@ async def target_price_entered(
         await state.clear()
         return
 
-    async with conn.cursor() as cursor:
-        await cursor.execute(
-            """
-            INSERT INTO products (user_id, marketplace, product_url, target_price)
-            VALUES (%s, %s, %s, %s);
-            """,
-            (user_row.telegram_id, marketplace, product_url, target_price)
-        )
+    await db.products.add_product(conn, user_id=user_row.telegram_id, marketplace=marketplace, product_url=product_url, target_price=target_price)
 
     await message.answer(
         f"✅ Товар успешно добавлен:\n"

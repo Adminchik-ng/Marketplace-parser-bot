@@ -1,3 +1,4 @@
+from math import prod
 from aiogram import Router, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -5,6 +6,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from psycopg import AsyncConnection
 from contextlib import suppress
+from database import db
 
 from ..states.states import RemoveProductStates
 
@@ -16,12 +18,7 @@ remove_product_router = Router()
 async def cmd_remove_start(message: types.Message, state: FSMContext, conn: AsyncConnection):
     user_id = message.from_user.id
 
-    async with conn.cursor() as cursor:
-        await cursor.execute(
-            "SELECT product_id, product_name, product_url FROM products WHERE user_id = %s AND is_active = TRUE;",
-            (user_id,)
-        )
-        products = await cursor.fetchall()
+    products = await db.products.get_user_active_products(conn, user_id=user_id)
 
     if not products:
         await message.answer("У вас нет товаров для удаления.")
@@ -71,23 +68,16 @@ async def process_remove_callback(
         await callback.answer()
         return
 
-    async with conn.cursor() as cursor:
-        await cursor.execute(
-            "SELECT product_name, product_url FROM products WHERE product_id = %s AND user_id = %s AND is_active = TRUE;",
-            (product_id, user_id)
-        )
-        product = await cursor.fetchone()
+    product = await db.products.get_product_by_id_and_user(conn, product_id=product_id, user_id=user_id)
 
-        if not product:
-            await callback.message.answer("Товар не найден или у вас нет прав для удаления.")
-            await callback.answer()
-            return
+    if not product:
+        await callback.message.answer("Товар не найден или у вас нет прав для удаления.")
+        await callback.answer()
+        return
 
-        product_name, product_url = product
+    product_name, product_url = product
 
-        await cursor.execute(
-            "DELETE FROM products WHERE product_id = %s;", (product_id,)
-        )
+    await db.products.delete_product_by_id(conn, product_id=product_id)
 
     # Удаляем сообщение с кнопками и отправляем новое с подтверждением
     with suppress(TelegramBadRequest):
@@ -114,13 +104,9 @@ async def resend_remove_keyboard(message: types.Message, state: FSMContext, conn
 
     # Загружаем товары заново
     user_id = message.from_user.id
-    async with conn.cursor() as cursor:
-        await cursor.execute(
-            "SELECT product_id, product_name, product_url FROM products WHERE user_id = %s AND is_active = TRUE;",
-            (user_id,)
-        )
-        products = await cursor.fetchall()
-
+    
+    products = await db.products.get_user_active_products(conn, user_id=user_id) 
+    
     if not products:
         await message.answer("У вас нет товаров для удаления.")
         await state.clear()
