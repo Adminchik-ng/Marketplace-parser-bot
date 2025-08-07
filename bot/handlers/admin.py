@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 admin_router = Router()
 
-admin_router.message.filter(UserRoleFilter(UserRole.ADMIN))
+admin_router.message.filter(UserRoleFilter(UserRole.ADMIN,))
 
 
 # Этот хэндлер будет срабатывать на команду /help для пользователя с ролью `UserRole.ADMIN`

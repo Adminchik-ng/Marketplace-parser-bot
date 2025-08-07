@@ -1,9 +1,6 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message
-from psycopg import AsyncConnection
-
 from bot.enums.roles import UserRole
-from database import db
 
 
 class UserRoleFilter(BaseFilter):
@@ -20,13 +17,17 @@ class UserRoleFilter(BaseFilter):
         if not self.roles:
             raise ValueError("No valid roles provided to `UserRoleFilter`.")
 
-    async def __call__(self, event: Message | CallbackQuery, conn: AsyncConnection) -> bool:
-        user = event.from_user
-        if not user:
+    async def __call__(
+        self,
+        event: Message | CallbackQuery,
+        user_row: object | None = None  # сюда будет передан user_row из middleware
+    ) -> bool:
+        if user_row is None:
+            # Если middleware не положил user_row в data — фильтр не пропустит
             return False
 
-        role = await db.users.get_user_role(conn, user_id=user.id)
-        if role is None:
+        user_role = getattr(user_row, 'role', None)
+        if user_role is None:
             return False
-        
-        return role in self.roles
+
+        return user_role in self.roles

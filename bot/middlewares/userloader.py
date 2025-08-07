@@ -3,10 +3,14 @@ from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Update, User
+from database import db
+from psycopg import AsyncConnection
+
 
 logger = logging.getLogger(__name__)
 
-class ShadowBanMiddleware(BaseMiddleware):
+
+class UserLoaderMiddleware(BaseMiddleware):
     async def __call__(
         self,
         handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
@@ -16,17 +20,17 @@ class ShadowBanMiddleware(BaseMiddleware):
         user: User = data.get("event_from_user")
         if user is None:
             return await handler(event, data)
+        
+        conn: AsyncConnection = data.get("conn")
+        if conn is None:
+            logger.error("Database connection not found in middleware data.")
+            raise RuntimeError("Missing database connection for user loading.")
 
-        user_row = data.get("user_row")
+        user_row = await db.users.get_user(conn, telegram_id=user.id)
         if user_row is None:
-            logger.error("user_row not found in context data for shadow ban check.")
-            # Если пользователя нет, пропускаем дальше — или можно заблокировать
+            logger.warning("User not found in DB: %d", user.id)
             return await handler(event, data)
-
-        if user_row.banned:
-            logger.warning("Shadow-banned user tried to interact: %d", user.id)
-            if event.callback_query:
-                await event.callback_query.answer()
-            return  # Останавливаем дальнейшую обработку
+        
+        data["user_row"] = user_row
 
         return await handler(event, data)

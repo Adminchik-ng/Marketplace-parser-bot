@@ -25,8 +25,8 @@ async def process_start_command(
     bot: Bot, 
     locales: dict[str, str], 
     admin_ids: list[int],
+    user_row: object | None = None
 ):
-    user_row = await db.users.get_user(conn, telegram_id=message.from_user.id)
     if user_row is None:
         if message.from_user.id in admin_ids:
             user_role = UserRole.ADMIN

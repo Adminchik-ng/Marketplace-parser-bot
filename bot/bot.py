@@ -1,4 +1,5 @@
 import logging
+from operator import add
 
 import psycopg_pool
 from aiogram import Bot, Dispatcher
@@ -6,11 +7,13 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
 from bot.handlers.admin import admin_router
-# from bot.handlers.others import others_router
+from bot.handlers.add_product import add_product_router
+from bot.handlers.remove_product import remove_product_router
 from bot.handlers.user import user_router
 from bot.middlewares.database import DataBaseMiddleware
 from bot.middlewares.shadow_ban import ShadowBanMiddleware
 from bot.middlewares.statistics import ActivityCounterMiddleware
+from bot.middlewares.userloader import UserLoaderMiddleware
 from bot.locales.ru import RU
 from connections.connection import get_pg_pool
 from config.config import Config
@@ -55,11 +58,12 @@ async def main(config: Config) -> None:
 
     # Подключаем роутеры в нужном порядке
     logger.info("Including routers...")
-    dp.include_routers(admin_router, user_router)
+    dp.include_routers(admin_router, user_router, add_product_router, remove_product_router)
 
     # Подключаем миддлвари в нужном порядке
     logger.info("Including middlewares...")
     dp.update.middleware(DataBaseMiddleware())
+    dp.update.middleware(UserLoaderMiddleware())
     dp.update.middleware(ShadowBanMiddleware())
     dp.update.middleware(ActivityCounterMiddleware())
 
