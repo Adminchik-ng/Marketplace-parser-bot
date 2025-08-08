@@ -32,7 +32,7 @@ async def get_user_active_products(
     async with conn.cursor() as cursor:
         await cursor.execute(
             """
-            SELECT product_id, product_name, product_url
+            SELECT product_id, product_name, product_url, target_price
             FROM products
             WHERE user_id = %s AND is_active = TRUE;
             """,
@@ -70,3 +70,19 @@ async def delete_product_by_id(
             (product_id,),
         )
     logger.info("Product deleted product_id=%d", product_id)
+
+async def get_user_active_products_with_prices(
+    conn: AsyncConnection,
+    *,
+    user_id: int
+) -> list[tuple[int, str | None, str, int, int, int, str]]:
+    async with conn.cursor() as cursor:
+        await cursor.execute(
+            """
+            SELECT product_id, product_name, product_url, target_price, current_price, min_price, marketplace
+            FROM products
+            WHERE user_id = %s AND is_active = TRUE;
+            """,
+            (user_id,),
+        )
+        return await cursor.fetchall()

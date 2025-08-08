@@ -14,17 +14,34 @@ async def add_user_activity(
     user_id: int,
 ) -> None:
     async with conn.cursor() as cursor:
+        # Проверяем, есть ли запись за сегодня
         await cursor.execute(
             query="""
-                INSERT INTO activity (user_id)
-                VALUES (%s)
-                ON CONFLICT (user_id, activity_date)
-                DO UPDATE SET actions = activity.actions + 1;
+                SELECT id FROM activity WHERE user_id = %s AND activity_date = CURRENT_DATE;
             """,
-            params=(user_id,),
+            params=(user_id,)
         )
-    logger.info("User activity updated. table=`activity`, user_id=%d", user_id)
-
+        row = await cursor.fetchone()
+        if row is None:
+            # Нет записи — вставляем новую со actions = 1
+            await cursor.execute(
+                query="""
+                    INSERT INTO activity (user_id, activity_date, actions)
+                    VALUES (%s, CURRENT_DATE, 1);
+                """,
+                params=(user_id,)
+            )
+        else:
+            # Есть запись — обновляем actions
+            await cursor.execute(
+                query="""
+                    UPDATE activity
+                    SET actions = actions + 1
+                    WHERE user_id = %s AND activity_date = CURRENT_DATE;
+                """,
+                params=(user_id,)
+            )
+    logger.info("User activity updated. user_id=%d", user_id)
 
 async def get_statistics(
     conn: AsyncConnection,

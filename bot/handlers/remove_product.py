@@ -26,7 +26,7 @@ async def cmd_remove_start(message: types.Message, state: FSMContext, conn: Asyn
 
     builder = InlineKeyboardBuilder()
 
-    for product_id, product_name, product_url in products:
+    for product_id, product_name, product_url, _ in products:
         text = f"{product_name}\n{product_url}" if product_name else product_url
         builder.button(text=text, callback_data=f"remove_{product_id}")
 
@@ -113,7 +113,7 @@ async def resend_remove_keyboard(message: types.Message, state: FSMContext, conn
         return
 
     builder = InlineKeyboardBuilder()
-    for product_id, product_name, product_url in products:
+    for product_id, product_name, product_url, _ in products:
         text = f"{product_name}\n{product_url}" if product_name else product_url
         builder.button(text=text, callback_data=f"remove_{product_id}")
 

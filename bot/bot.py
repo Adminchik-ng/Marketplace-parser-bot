@@ -9,7 +9,10 @@ from aiogram.fsm.storage.redis import RedisStorage
 from bot.handlers.admin import admin_router
 from bot.handlers.add_product import add_product_router
 from bot.handlers.remove_product import remove_product_router
+from bot.handlers.list_product import list_router
 from bot.handlers.user import user_router
+from bot.handlers.summary_product import summary_router 
+from bot.handlers.others import others_router
 from bot.middlewares.database import DataBaseMiddleware
 from bot.middlewares.shadow_ban import ShadowBanMiddleware
 from bot.middlewares.statistics import ActivityCounterMiddleware
@@ -58,7 +61,14 @@ async def main(config: Config) -> None:
 
     # Подключаем роутеры в нужном порядке
     logger.info("Including routers...")
-    dp.include_routers(admin_router, user_router, add_product_router, remove_product_router)
+    dp.include_routers(admin_router, 
+                       user_router, 
+                       add_product_router, 
+                       remove_product_router, 
+                       list_router, 
+                       summary_router, 
+                       others_router
+                       )
 
     # Подключаем миддлвари в нужном порядке
     logger.info("Including middlewares...")
