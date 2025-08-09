@@ -1,12 +1,15 @@
 import asyncio
+from itertools import product
+from math import prod
 import re
 import random
 import time
 import logging
-from typing import Optional, Union
+from tkinter import N
+from typing import Optional, Union, Tuple
 from playwright.async_api import async_playwright, Page, Browser, TimeoutError
-
-logging.basicConfig(level=logging.INFO)
+    
+# logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def check_product_exists(page: Page) -> bool:
@@ -132,11 +135,19 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
         return None
 
 
-async def single_task(browser: Browser, url: str) -> None:
+async def single_task(
+    browser: Browser,
+    products_id_and_urls_and_min_price: Tuple[int, str, int],
+) -> Tuple[int, Optional[int], Optional[str], Optional[int], str]:
     """
     Одна задача: создаёт контекст и страницу, загружает URL,
     проверяет наличие товара и получает цену и название.
     """
+    
+    product_id = products_id_and_urls_and_min_price[0]
+    url = products_id_and_urls_and_min_price[1]
+    min_price = products_id_and_urls_and_min_price[2]
+
     context = await browser.new_context(
         user_agent=(
             f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -158,7 +169,7 @@ async def single_task(browser: Browser, url: str) -> None:
     if not exists:
         logger.info("Товар не найден на маркетплейсе")
         await context.close()
-        return
+        return (product_id, None, None, min_price, "Товар не найден")
 
     # Получаем цену
     price = await get_discount_price_wb(page)
@@ -170,29 +181,48 @@ async def single_task(browser: Browser, url: str) -> None:
 
     if isinstance(price, int) and name:
         logger.info(f"Цена со скидкой: {price} ₽ на товар {name}")
+        if min_price:
+            if price <= min_price:
+                return (product_id, price, name, price, None)
+            else:
+                return (product_id, price, name, min_price, None)
+        else:
+            return (product_id, price, name, price, None)
+        
     elif isinstance(price, str):
-        logger.info(price)
+        logger.info(f"Найдена только цена со скидкой: {price} ₽")
+        if min_price:
+            if price <= min_price:
+                return (product_id, price, None, price, None)
+            else:
+                return (product_id, price, None, min_price, None)
+        else:
+            return (product_id, price, None, price, None)
+
     else:
         logger.info("Цена не найдена")
+        return (product_id, None, None, min_price, "Товар не найден")
 
 
-async def process_many_wb_tasks(urls: list[str], max_concurrent: int = 5) -> None:
+async def process_many_wb_tasks(products_id_and_urls_and_min_prices: list[(int, str, int)], max_concurrent: int = 5) -> list[(int, int, str, int)]:
     """
-    Запускает несколько одновременных задач по списку url.
+    Запускает несколько одновременных задач по списку url и возвращает результаты.
     """
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True) # здесь меняем режим открытия браузера
-
+        browser = await p.chromium.launch(headless=True)  # здесь меняем режим открытия браузера
         semaphore = asyncio.Semaphore(max_concurrent)
 
         async def sem_task(url: str):
             async with semaphore:
-                await single_task(browser, url)
+                return await single_task(browser, url)  # возвращаем результат single_task
 
-        tasks = [asyncio.create_task(sem_task(url)) for url in urls]
-        await asyncio.gather(*tasks)
+        tasks = [asyncio.create_task(sem_task(products_id_and_urls_and_min_price)) for products_id_and_urls_and_min_price in products_id_and_urls_and_min_prices]
+        results = await asyncio.gather(*tasks)
 
         await browser.close()
+
+        return results  # возвращаем список результатов
+
 
 if __name__ == "__main__":
     urls = [

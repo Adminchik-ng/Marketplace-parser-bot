@@ -1,35 +1,39 @@
 import logging
-from operator import add
 
-import psycopg_pool
+import asyncpg
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import RedisStorage
-from bot.handlers.admin import admin_router
-from bot.handlers.add_product import add_product_router
-from bot.handlers.remove_product import remove_product_router
-from bot.handlers.list_product import list_router
-from bot.handlers.user import user_router
-from bot.handlers.summary_product import summary_router 
-from bot.handlers.others import others_router
-from bot.middlewares.database import DataBaseMiddleware
-from bot.middlewares.shadow_ban import ShadowBanMiddleware
-from bot.middlewares.statistics import ActivityCounterMiddleware
-from bot.middlewares.userloader import UserLoaderMiddleware
-from bot.locales.ru import RU
-from connections.connection import get_pg_pool
-from config.config import Config
 from redis.asyncio import Redis
 
+from bot.handlers import (
+    admin_router,
+    user_router,
+    add_product_router,
+    remove_product_router,
+    list_router,
+    summary_router,
+    others_router,
+)
+from bot.middlewares import (
+    DataBaseMiddleware,
+    UserLoaderMiddleware,
+    ShadowBanMiddleware,
+    ActivityCounterMiddleware,
+)
+from bot.locales.ru import RU
+from bot.background_tasks.background_tasks import on_startup
+from config.config import Config
+import bot.db_pool_singleton.db_pool_singleton as global_pool
 
 logger = logging.getLogger(__name__)
 
 
-# Функция конфигурирования и запуска бота
 async def main(config: Config) -> None:
     logger.info("Starting bot...")
-    # Инициализируем хранилище
+
+    # Инициализируем хранилище для FSM через Redis
     storage = RedisStorage(
         redis=Redis(
             host=config.redis.host,
@@ -40,53 +44,65 @@ async def main(config: Config) -> None:
         )
     )
 
-    # Инициализируем бот и диспетчер
+    # Инициализируем бота с HTML разметкой по умолчанию
     bot = Bot(
         token=config.bot.token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+
     dp = Dispatcher(storage=storage)
 
-    # Создаём пул соединений с Postgres
-    db_pool: psycopg_pool.AsyncConnectionPool = await get_pg_pool(
-        db_name=config.db.name,
-        host=config.db.host,
-        port=config.db.port,
+    # Создаём пул соединений asyncpg для PostgreSQL
+    db_pool: asyncpg.Pool = await asyncpg.create_pool(
         user=config.db.user,
         password=config.db.password,
+        database=config.db.name,
+        host=config.db.host,
+        port=config.db.port,
+        min_size=1,
+        max_size=10,
     )
+    global_pool.db_pool_global = db_pool
 
-    # Получаем словарь с переводами
+    # Получаем локализацию
     locales = RU
 
-    # Подключаем роутеры в нужном порядке
-    logger.info("Including routers...")
-    dp.include_routers(admin_router, 
-                       user_router, 
-                       add_product_router, 
-                       remove_product_router, 
-                       list_router, 
-                       summary_router, 
-                       others_router
-                       )
+    # Регистрируем функцию для запуска фоновых задач
+    dp.startup.register(on_startup)
 
-    # Подключаем миддлвари в нужном порядке
+    # Регистрируем роутеры в нужном порядке
+    logger.info("Including routers...")
+    dp.include_routers(
+        admin_router,
+        user_router,
+        add_product_router,
+        remove_product_router,
+        list_router,
+        summary_router,
+        others_router,
+    )
+
+    # Подключаем middleware в правильном порядке
     logger.info("Including middlewares...")
     dp.update.middleware(DataBaseMiddleware())
     dp.update.middleware(UserLoaderMiddleware())
     dp.update.middleware(ShadowBanMiddleware())
     dp.update.middleware(ActivityCounterMiddleware())
 
-    # Запускаем поллинг
     try:
+        # Удаляем webhook, если есть
+        await bot.delete_webhook(drop_pending_updates=True)
+
+        # Запускаем поллинг, передаём пул и другие параметры в context
         await dp.start_polling(
-            bot, db_pool=db_pool,  
-            locales=locales, 
-            admin_ids=config.bot.admin_ids
+            bot,
+            db_pool=db_pool,
+            locales=locales,
+            admin_ids=config.bot.admin_ids,
         )
     except Exception as e:
-        logger.exception(e)
+        logger.exception("Exception occurred while running the bot: %s", e)
     finally:
-        # Закрываем пул соединений
+        # Закрываем пул при завершении
         await db_pool.close()
         logger.info("Connection to Postgres closed")

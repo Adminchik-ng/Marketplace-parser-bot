@@ -1,32 +1,36 @@
 import re
+import logging
 from contextlib import suppress
+from typing import Optional
 
 from aiogram import Router, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
-from database import db
+from asyncpg import Connection
 
-from psycopg import AsyncConnection
-
+from database import db  # Ваш модуль с функциями БД
 from ..states.states import AddProductStates
 from ..keyboards.keyboards import marketplace_keyboard
 
+logger = logging.getLogger(__name__)
 add_product_router = Router()
+
 
 VALID_MARKETPLACES = {"wildberries", "ozon", "yandex", "joom"}
 
 URL_REGEX = re.compile(
     r'^https?://(?:www\.)?'
     r'('
-    r'wildberries\.ru|'               # Wildberries
-    r'ozon\.ru|'                     # Ozon
-    r'yandex\.market|'               # Яндекс.Маркет
-    r'joom\.com'                    # Joom
+    r'wildberries\.ru|'        # Wildberries
+    r'ozon\.ru|'               # Ozon
+    r'yandex\.market|'         # Яндекс.Маркет
+    r'joom\.com'               # Joom
     r')'
     r'[/\w\-\._~:/?#\[\]@!$&\'()*+,;=%]*$',  # Остальная часть URL
     re.IGNORECASE
 )
+
 
 def is_valid_url(url: str) -> bool:
     return bool(URL_REGEX.match(url))
@@ -39,7 +43,7 @@ async def cmd_add_start(message: types.Message, state: FSMContext):
         "Выберите маркетплейс:",
         reply_markup=marketplace_keyboard()
     )
-    
+
     await state.update_data(marketplace_msg_id=msg.message_id)
     await state.set_state(AddProductStates.marketplace)
 
@@ -59,7 +63,10 @@ async def marketplace_chosen(callback: types.CallbackQuery, state: FSMContext):
 
     if callback.data == "cancel":
         await state.clear()
-        await callback.message.edit_text("Добавление товара отменено.")
+        with suppress(TelegramBadRequest):
+            # Удаляем сообщение с кнопками выбора
+            await callback.message.delete()
+        await callback.message.answer("Добавление товара отменено.")
         return
 
     marketplace = callback.data.split("_", 1)[1]
@@ -113,13 +120,14 @@ async def product_url_entered(message: types.Message, state: FSMContext):
 async def target_price_entered(
     message: types.Message,
     state: FSMContext,
-    conn: AsyncConnection,
-    user_row: object | None = None
+    conn: Connection,         # asyncpg.Connection (middleware должен передавать)
+    user_row: Optional[object] = None,
 ):
     price_text = message.text.strip()
+
     if not price_text.isdigit():
         await message.answer(
-            "⚠️ Введено некорректное число. Пожалуйста, введите целевую цену целым числом (например, 5990)."
+            "⚠️ Введено некорректное число. Пожалуйста, введите целую целевую цену (например, 5990)."
         )
         return
 
@@ -139,7 +147,31 @@ async def target_price_entered(
         await state.clear()
         return
 
-    await db.products.add_product(conn, user_id=user_row.telegram_id, marketplace=marketplace, product_url=product_url, target_price=target_price)
+    if user_row is None:
+        await message.answer("Ошибка авторизации пользователя. Попробуйте позже.")
+        await state.clear()
+        return
+
+    # Безопасно получаем telegram_id из user_row (объекта или dict)
+    user_id = getattr(user_row, "telegram_id", None) or user_row.get("telegram_id", None)
+    if user_id is None:
+        await message.answer("Не удалось получить ID пользователя. Попробуйте позже.")
+        await state.clear()
+        return
+
+    try:
+        await db.products.add_product(
+            conn=conn,
+            user_id=user_id,
+            marketplace=marketplace,
+            product_url=product_url,
+            target_price=target_price
+        )
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении товара: {e}", exc_info=True)
+        await message.answer("Произошла ошибка при добавлении товара. Попробуйте позже.")
+        await state.clear()
+        return
 
     await message.answer(
         f"✅ Товар успешно добавлен:\n"

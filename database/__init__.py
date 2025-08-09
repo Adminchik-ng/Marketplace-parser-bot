@@ -1,4 +1,3 @@
-from calendar import c
 from . import activity_table
 from . import users_table
 from . import products_table   
