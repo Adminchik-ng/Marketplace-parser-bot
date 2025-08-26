@@ -29,6 +29,7 @@ async def process_start_command(
     user_row: Optional[object] = None,
 ):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     if user_row is None:
         if user_id in admin_ids:
             user_role = UserRole.ADMIN
@@ -38,6 +39,7 @@ async def process_start_command(
         await db.users.add_user(
             conn=conn,
             telegram_id=user_id,
+            chat_id=chat_id,
             username=message.from_user.username,
             language=message.from_user.language_code or "ru",
             role=user_role.value if hasattr(user_role, "value") else user_role,
@@ -50,9 +52,9 @@ async def process_start_command(
             telegram_id=user_id,
         )
 
-        products = await db.products.get_user_inactive_products(conn=conn, user_id=user_id)
+        products = await db.products.get_user_inactive_products_to_turn_on_after_block_bot(conn=conn, user_id=user_id)
         if products:
-            for product_id, _, _, _ in products:
+            for product_id in products:
                 await db.products.change_product_active_status(conn=conn, is_active=True, product_id=product_id)
 
     await bot.set_my_commands(
@@ -70,6 +72,10 @@ async def process_start_command(
 async def process_help_command(message: Message, locales: dict[str, str]):
     await message.answer(text=locales.get("/help"))
 
+@user_router.message(Command(commands="info"))
+async def process_help_command(message: Message, locales: dict[str, str]):
+    await message.answer(text=locales.get("/info"))
+
 
 @user_router.my_chat_member(ChatMemberUpdatedFilter(member_status_changed=KICKED))
 async def process_user_blocked_bot(event: ChatMemberUpdated, conn: Connection):
@@ -86,5 +92,5 @@ async def process_user_blocked_bot(event: ChatMemberUpdated, conn: Connection):
     if not products:
         return
 
-    for product_id, _, _, _ in products:
+    for product_id, _, _, _, _ in products:
         await db.products.change_product_active_status(conn=conn, is_active=False, product_id=product_id)

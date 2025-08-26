@@ -25,18 +25,50 @@ async def process_admin_statistics_command(
     conn: Connection, 
     locales: dict[str, str]
 ):
-    statistics = await db.activity.get_statistics(conn)
-    if not statistics:
+    total_users = await db.users.get_total_users(conn)
+    active_today = await db.activity.get_active_users_today(conn)
+    roles_dist = await db.users.get_users_role_distribution(conn)
+    new_users_percent = await db.users.get_percent_new_users_week(conn)
+    active_products = await db.products.get_active_products_by_marketplace(conn)
+    inactive_products = await db.products.get_inactive_products_by_marketplace(conn)
+    top_users = await db.activity.get_statistics(conn)  # топ пользователей по активности
+    
+    if not any([total_users, active_today, roles_dist, new_users_percent, active_products, inactive_products, top_users]):
         await message.answer(text=locales.get("no_statistics", "Статистика отсутствует."))
         return
 
-    formatted_stats = "\n".join(
-        f"{i}. <b>{stat[0]}</b>: {stat[1]}"
-        for i, stat in enumerate(statistics, 1)
-    )
-    await message.answer(
-        text=locales.get("statistics", "Статистика:\n{}").format(formatted_stats)
-    )
+    lines = []
+    lines.append("📊 Статистика бота 📊")
+    lines.append("────────────────────")
+    if total_users is not None:
+        lines.append(f"👥 Всего пользователей: {total_users}")
+    if active_today is not None:
+        lines.append(f"🔥 Активных сегодня: {active_today}")
+    if roles_dist:
+        lines.append("🛡️ Распределение по ролям:")
+        for role, banned, count in roles_dist:
+            status_emoji = "🚫" if banned else "✅"
+            status_text = "заблокирован" if banned else "активен"
+            lines.append(f"  - {role.capitalize()} {status_emoji} ({status_text}): {count}")
+    if new_users_percent is not None:
+        lines.append(f"🆕 Новых за неделю: {new_users_percent:.2f}%")
+    if active_products:
+        lines.append("📦 Активные товары по маркетплейсам:")
+        for marketplace, count in active_products:
+            lines.append(f"  - 🏷️ {marketplace}: {count}")
+    if inactive_products:
+        lines.append("📦 Неактивные товары по маркетплейсам:")
+        for marketplace, count in inactive_products:
+            lines.append(f"  - 🏷️ {marketplace}: {count}")
+    if top_users:
+        lines.append("🏆 Топ пользователей по активности:")
+        for i, (user_id, actions) in enumerate(top_users, 1):
+            lines.append(f"  {i}. 👤 User ID {user_id}: {actions} действий")
+
+    final_text = "\n".join(lines)
+    await message.answer(text=final_text)
+
+
 
 
 @admin_router.message(Command("ban"))

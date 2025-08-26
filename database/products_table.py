@@ -33,14 +33,15 @@ async def get_user_active_products(
 ) -> List[Tuple[int, Optional[str], str, int]]:
     rows = await conn.fetch(
         """
-        SELECT product_id, product_name, product_url, target_price
+        SELECT product_id, product_name, product_url, target_price, marketplace
         FROM products
-        WHERE user_id = $1 AND is_active = TRUE;
+        WHERE user_id = $1 AND is_active = TRUE AND (last_error IS NULL OR last_error = '')
+        ORDER BY marketplace;
         """,
         user_id,
     )
     return [
-        (r["product_id"], r["product_name"], r["product_url"], r["target_price"]) 
+        (r["product_id"], r["product_name"], r["product_url"], r["target_price"], r["marketplace"]) 
         for r in rows
     ]
 
@@ -51,14 +52,33 @@ async def get_user_inactive_products(
 ) -> List[Tuple[int, Optional[str], str]]:
     rows = await conn.fetch(
         """
-        SELECT product_id, product_name, product_url, target_price
+        SELECT product_id, product_name, product_url, target_price, marketplace
         FROM products
-        WHERE user_id = $1 AND is_active = FALSE;
+        WHERE user_id = $1 AND is_active = FALSE OR last_error IS NOT NULL
+        ORDER BY marketplace;
         """,
         user_id,
     )
     return [
-        (r["product_id"], r["product_name"], r["product_url"], r["target_price"]) 
+        (r["product_id"], r["product_name"], r["product_url"], r["target_price"], r["marketplace"]) 
+        for r in rows
+    ]
+    
+async def get_user_inactive_products_to_turn_on_after_block_bot(
+    conn: Connection,
+    *,
+    user_id: int,
+) -> List[Tuple[int, Optional[str], str]]:
+    rows = await conn.fetch(
+        """
+        SELECT product_id
+        FROM products
+        WHERE user_id = $1 AND is_active = FALSE AND last_error IS NULL
+        """,
+        user_id,
+    )
+    return [
+        (r["product_id"]) 
         for r in rows
     ]
     
@@ -72,7 +92,7 @@ async def get_product_by_id_and_user(
         """
         SELECT product_name, product_url
         FROM products
-        WHERE product_id = $1 AND user_id = $2 AND is_active = TRUE;
+        WHERE product_id = $1 AND user_id = $2;
         """,
         product_id, user_id,
     )
@@ -104,7 +124,8 @@ async def get_user_active_products_with_prices_and_errors(
         """
         SELECT product_id, product_name, product_url, target_price, current_price, min_price, marketplace, last_error, last_checked
         FROM products
-        WHERE user_id = $1;
+        WHERE user_id = $1
+        ORDER BY last_error DESC, marketplace;
         """,
         user_id,
     )
@@ -144,15 +165,15 @@ async def change_product_active_status(
 
 async def get_products_items_for_parsing(
     conn: Connection,
-) -> List[Tuple[int, str, str, int]]:
+) -> List[Tuple[int, str, str, int, int]]:
     rows = await conn.fetch(
         """
-        SELECT product_id, product_url, marketplace, min_price
+        SELECT user_id,product_id, product_url, marketplace, min_price, target_price
         FROM products
-        WHERE is_active = TRUE;
+        WHERE is_active = TRUE AND (last_error IS NULL OR last_error = '');
         """
     )
-    return [(r["product_id"], r["product_url"], r["marketplace"], r["min_price"]) for r in rows]
+    return [(r["user_id"], r["product_id"], r["product_url"], r["marketplace"], r["min_price"], r["target_price"]) for r in rows]
 
 
 async def change_product_price_and_error(
@@ -173,8 +194,39 @@ async def change_product_price_and_error(
             min_price = $3,
             last_checked = now(),
             last_error = $4,
-            is_active =  $5
+            is_active =  $5,
+            updated_at = now()
         WHERE product_id = $6;
         """,
         current_price, product_name, min_price, last_error, is_active, product_id,
     )
+
+# Количество активных товаров, сгруппированных по маркетплейсам
+async def get_active_products_by_marketplace(conn: Connection) -> Optional[List[Tuple[str, int]]]:
+    rows = await conn.fetch(
+        """
+        SELECT marketplace, COUNT(*) AS active_count
+        FROM products
+        WHERE is_active = TRUE AND (last_error IS NULL OR last_error = '')
+        GROUP BY marketplace;
+        """
+    )
+    logger.info("Active products by marketplace retrieved")
+    if rows:
+        return [(row["marketplace"], row["active_count"]) for row in rows]
+    return None
+
+# Количество неактивных товаров, сгруппированных по маркетплейсам
+async def get_inactive_products_by_marketplace(conn: Connection) -> Optional[List[Tuple[str, int]]]:
+    rows = await conn.fetch(
+        """
+        SELECT marketplace, COUNT(*) AS active_count
+        FROM products
+        WHERE last_error IS NOT NULL
+        GROUP BY marketplace;
+        """
+    )
+    logger.info("Active products by marketplace retrieved")
+    if rows:
+        return [(row["marketplace"], row["active_count"]) for row in rows]
+    return None

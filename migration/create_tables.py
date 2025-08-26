@@ -37,6 +37,7 @@ async def main():
                 CREATE TABLE IF NOT EXISTS users (
                     id BIGSERIAL PRIMARY KEY,
                     telegram_id BIGINT UNIQUE NOT NULL,
+                    chat_id BIGINT UNIQUE NOT NULL,
                     username VARCHAR(64),
                     language VARCHAR(8),
                     role VARCHAR(16) DEFAULT 'user',
@@ -46,6 +47,7 @@ async def main():
                     updated_at TIMESTAMPTZ DEFAULT now()
                 );
             """)
+
 
             # Таблица активности
             await connection.execute("""
@@ -78,6 +80,7 @@ async def main():
                     updated_at TIMESTAMPTZ DEFAULT now()
                 );
             """)
+            
 
             logger.info("Tables `users`, `activity`, and `products` were successfully created")
 

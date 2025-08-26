@@ -56,3 +56,17 @@ async def get_statistics(
         # Преобразуем в список кортежей (user_id, total_actions)
         return [(row["user_id"], row["total_actions"]) for row in rows]
     return None
+
+# Количество активных пользователей за текущий день
+async def get_active_users_today(conn: Connection) -> Optional[int]:
+    row = await conn.fetchrow(
+        """
+        SELECT COUNT(DISTINCT user_id) AS active_count
+        FROM activity
+        WHERE activity_date = CURRENT_DATE;
+        """
+    )
+    logger.info("Active users today count retrieved")
+    if row:
+        return row["active_count"]
+    return None

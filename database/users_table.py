@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, List
 from asyncpg import Connection
 
 from bot.enums.roles import UserRole, UserRow  # оставил, как есть
@@ -12,6 +12,7 @@ async def add_user(
     conn: Connection,
     *,
     telegram_id: int,
+    chat_id: int = None,
     username: Optional[str] = None,
     language: str = "ru",
     role: str = UserRole.USER.value,
@@ -20,11 +21,11 @@ async def add_user(
 ) -> None:
     await conn.execute(
         """
-        INSERT INTO users(telegram_id, username, language, role, is_alive, banned)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO users(telegram_id, chat_id, username, language, role, is_alive, banned)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (telegram_id) DO NOTHING;
         """,
-        telegram_id, username, language, role, is_alive, banned,
+        telegram_id, chat_id, username, language, role, is_alive, banned,
     )
     logger.info(
         "User added. Table=`users`, telegram_id=%d, created_at='%s', "
@@ -195,3 +196,57 @@ async def get_user_role(
     else:
         logger.warning("No user with id `%s` found in the database", user_id)
         return None
+
+async def get_user_chat_id(
+    conn: Connection,
+    *,
+    user_id: int,
+) -> Optional[str]:
+    row = await conn.fetchrow(
+        """
+        SELECT chat_id FROM users WHERE telegram_id = $1;
+        """,
+        user_id,
+    )
+    if row:
+        logger.info("The user with id `%s` has the chat_id=%s", user_id, row["chat_id"])
+        return row["chat_id"]
+    else:
+        logger.warning("No chat_id for user with id `%s` found in the database", user_id)
+        return None
+    
+# Общее количество зарегистрированных пользователей
+async def get_total_users(conn: Connection) -> Optional[int]:
+    row = await conn.fetchrow("SELECT COUNT(*) AS total FROM users;")
+    logger.info("Total users count retrieved")
+    if row:
+        return row["total"]
+    return None
+
+# Распределение пользователей по ролям и статусу banned
+async def get_users_role_distribution(conn: Connection) -> Optional[List[Tuple[str, bool, int]]]:
+    rows = await conn.fetch(
+        """
+        SELECT role, banned, COUNT(*) AS count
+        FROM users
+        GROUP BY role, banned;
+        """
+    )
+    logger.info("Users role distribution retrieved")
+    if rows:
+        return [(row["role"], row["banned"], row["count"]) for row in rows]
+    return None
+
+# Процент новых пользователей за последние 7 дней
+async def get_percent_new_users_week(conn: Connection) -> Optional[float]:
+    row = await conn.fetchrow(
+        """
+        SELECT 
+            (COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')) * 100.0 / COUNT(*) AS percent_new
+        FROM users;
+        """
+    )
+    logger.info("Percent of new users this week retrieved")
+    if row:
+        return row["percent_new"]
+    return None

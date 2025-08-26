@@ -63,6 +63,7 @@ async def main(config: Config) -> None:
         max_size=10,
     )
     global_pool.db_pool_global = db_pool
+    global_pool.bot_instance = bot
 
     # Получаем локализацию
     locales = RU

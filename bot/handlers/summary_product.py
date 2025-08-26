@@ -1,15 +1,28 @@
-from datetime import datetime
-from typing import Optional
-
+from datetime import datetime, timedelta
 from aiogram import Router, types
 from aiogram.filters import Command
-from asyncpg import Connection
-from datetime import timedelta
 
 from database import db
 
-
 summary_router = Router()
+MAX_MSG_LENGTH = 4096
+
+
+async def send_long_message(message_obj: types.Message, text: str):
+    """
+    Функция для отправки длинного текста частями по лимиту Telegram (4096 символов),
+    разбивая по последнему переносу строки, чтобы не обрезать слова.
+    """
+    while text:
+        part = text[:MAX_MSG_LENGTH]
+
+        # Разбиваем по последнему \n, если это возможно и сообщение длиннее лимита
+        cut_pos = part.rfind("\n")
+        if cut_pos != -1 and len(text) > MAX_MSG_LENGTH:
+            part = part[:cut_pos]
+
+        await message_obj.answer(part, parse_mode="Markdown")
+        text = text[len(part):]
 
 
 @summary_router.message(Command(commands=["summary"]))
@@ -17,7 +30,6 @@ async def cmd_summary(message: types.Message, conn):
     user_id = message.from_user.id
 
     try:
-        # Предполагается, что метод возвращает данные с last_checked включительно
         products = await db.products.get_user_active_products_with_prices_and_errors(
             conn, user_id=user_id
         )
@@ -42,58 +54,53 @@ async def cmd_summary(message: types.Message, conn):
             min_price,
             marketplace,
             last_error,
-            last_checked,  # Добавьте это поле в ваш SQL-запрос
+            last_checked,
         ) = item
+
         if isinstance(last_checked, datetime):
-                # Переводим last_checked в Москву
             last_checked_moscow = last_checked + timedelta(hours=3)
             last_checked_str = last_checked_moscow.strftime("%d.%m.%Y %H:%M")
         else:
-            last_checked_str = str(last_checked) if last_checked else "еще не проверяли😔"
+            last_checked_str = str(last_checked) if last_checked else None
 
         if last_error:
-            
             lines.append(
-                f"{idx}. ❌[{marketplace}]❌\n"
-                f"⚠️ Отслеживание прервано из-за ошибки: "
-                f"{last_error}\n"
+                f"{idx}. ❌[{marketplace.title()}]❌\n"
+                f"⚠️ Отслеживание прервано из-за ошибки: {last_error}\n"
                 f"🕒 Последняя проверка: {last_checked_str}\n"
-                f"🔗 Ссылка: {product_url}\n"
-                f"⚠️ Внимание! Товар убран из отслеживания.\n"
+                f"🔗 Ссылка: [перейти к товару]({product_url})\n"
+                f"❗️ Внимание! Товар убран из отслеживания.\n"
             )
             continue
 
-        product_name_display = product_name or "пока не отследили😔"
-
         if current_price is not None:
             if current_price <= target_price:
-                status_line = "✅ Цель достигнута!"
+                status_line = "✅ Цель достигнута!\n"
                 diff_line = "\n"
             else:
                 diff = current_price - target_price
                 status_line = ""
-                diff_line = f"\n❌ До цели: {diff} ₽ ({target_price} ₽)\n"
+                diff_line = f"\n🔻 До цели: {diff} ₽\n"
 
             lines.append(
-                f"{idx}. [{marketplace}]\n"
-                f"🆔 Название товара: {product_name_display}\n"
-                 f"🔗 Ссылка: {product_url}\n"
+                f"{idx}. [{marketplace.title()}]\n"
                 f"{status_line}"
+                f"🆔 Название товара: {product_name}\n"
+                f"🔗 Ссылка: [перейти к товару]({product_url})\n"
                 f"🎯 Целевая цена: {target_price} ₽\n"
-                f"💰 Текущая: {current_price} ₽ | 📉 Минимум: {min_price} ₽"
+                f"💰 Текущая: {current_price} ₽"
                 f"{diff_line}"
+                f"📉 Минимум: {min_price} ₽\n"
                 f"🕒 Последняя проверка: {last_checked_str}\n"
             )
         else:
             lines.append(
-                f"{idx}. [{marketplace}]\n"
-                f"🆔 Название товара: {product_name_display}\n"
-                f"🔗 Ссылка: {product_url}\n"
-                f"ℹ️ Данные о цене еще не доступны.\n"
-                f"🔗 Ссылка: {product_url}\n"
-                f"🕒 Последняя проверка: {last_checked_str}\n"
+                f"{idx}. [{marketplace.title()}]\n"
+                f"⌛ Информация по товару пока недоступна, но мы уже работаем над её получением!\n"
+                f"🔗 Ссылка: [перейти к товару]({product_url})\n"
+                f"🎯 Целевая цена: {target_price} ₽\n"
             )
 
     report = "\n".join(line for line in lines if line.strip())
 
-    await message.answer(report)
+    await send_long_message(message, report)

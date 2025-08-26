@@ -22,14 +22,16 @@ VALID_MARKETPLACES = {"wildberries", "ozon", "yandex", "joom"}
 URL_REGEX = re.compile(
     r'^https?://(?:www\.)?'
     r'('
-    r'wildberries\.ru|'        # Wildberries
-    r'ozon\.ru|'               # Ozon
-    r'yandex\.market|'         # Яндекс.Маркет
-    r'joom\.com'               # Joom
+    r'wildberries\.ru|'           # Wildberries
+    r'ozon\.ru|'                 # Ozon
+    r'((?:[\w-]+\.)*yandex\.ru)|' # yandex.ru с любыми поддоменами
+    r'yandex\.market|'           # Яндекс.Маркет
+    r'joom\.(com|ru)'
     r')'
-    r'[/\w\-\._~:/?#\[\]@!$&\'()*+,;=%]*$',  # Остальная часть URL
+    r'[/\w\-\._~:/?#\[\]@!$&\'()*+,;=%]*$', # Остальная часть URL
     re.IGNORECASE
 )
+
 
 
 def is_valid_url(url: str) -> bool:
@@ -72,8 +74,7 @@ async def marketplace_chosen(callback: types.CallbackQuery, state: FSMContext):
     marketplace = callback.data.split("_", 1)[1]
     await state.update_data(marketplace=marketplace)
     await callback.message.edit_text(
-        "Введите ссылку на товар:\n"
-        "Пример: https://www.wildberries.ru/catalog/246780526/detail.aspx"
+        "Введите ссылку на товар или воспользуйтесь командой /cancel для отмены.",
     )
     await state.set_state(AddProductStates.product_url)
 
@@ -99,18 +100,21 @@ async def resend_marketplace_buttons(message: types.Message, state: FSMContext):
 # Обработка ввода ссылки на товар
 @add_product_router.message(AddProductStates.product_url)
 async def product_url_entered(message: types.Message, state: FSMContext):
+    if message.text.lower() == "/cancel":
+        await state.clear()
+        await message.answer("Добавление товара отменено.")
+        return
+    
     url = message.text.strip()
     if not is_valid_url(url):
         await message.answer(
-            "⚠️ Введена некорректная ссылка. Пожалуйста, введите корректную ссылку.\n"
-            "Пример: https://www.wildberries.ru/catalog/246780526/detail.aspx"
+            "⚠️ Введена некорректная ссылка. Пожалуйста, попробуйте ещё раз или введите /cancel, чтобы отменить добавление товара."
         )
         return
 
     await state.update_data(product_url=url)
     await message.answer(
-        "Введите целевую цену (в рублях):\n"
-        "Пример: 5990"
+        "Введите целевую цену (в рублях) или введите /cancel, чтобы отменить добавление товара."
     )
     await state.set_state(AddProductStates.target_price)
 
@@ -123,18 +127,23 @@ async def target_price_entered(
     conn: Connection,         # asyncpg.Connection (middleware должен передавать)
     user_row: Optional[object] = None,
 ):
+    if message.text.lower() == "/cancel":
+        await state.clear()
+        await message.answer("Добавление товара отменено.")
+        return
+    
     price_text = message.text.strip()
 
     if not price_text.isdigit():
         await message.answer(
-            "⚠️ Введено некорректное число. Пожалуйста, введите целую целевую цену (например, 5990)."
+            "⚠️ Введено некорректное число, введите целую цену (например, 5990) или /cancel для отмены."
         )
         return
 
     target_price = int(price_text)
     if target_price <= 0:
         await message.answer(
-            "⚠️ Цена должна быть больше нуля. Попробуйте снова."
+            "⚠️ Цена должна быть больше нуля, пожалуйста, попробуйте снова или введите /cancel для отмены."
         )
         return
 

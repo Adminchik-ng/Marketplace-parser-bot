@@ -34,7 +34,7 @@ async def cmd_remove_start(
 
     builder = InlineKeyboardBuilder()
 
-    for product_id, product_name, product_url, _ in products:
+    for product_id, product_name, product_url, _, _ in products:
         text = f"{product_name if product_name else product_url}"
         builder.button(text=text, callback_data=f"remove_{product_id}")
 
@@ -122,7 +122,7 @@ async def resend_remove_keyboard(
         return
 
     builder = InlineKeyboardBuilder()
-    for product_id, product_name, product_url, _ in products:
+    for product_id, product_name, product_url, _, _ in products:
         text = f"{product_name}\n{product_url}" if product_name else product_url
         builder.button(text=text, callback_data=f"remove_{product_id}")
 

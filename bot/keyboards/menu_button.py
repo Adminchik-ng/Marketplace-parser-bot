@@ -28,6 +28,10 @@ def get_main_menu_commands(locales: dict[str, str], role: UserRole):
             BotCommand(
                 command='/help',
                 description=locales.get('/help_description')
+            ), 
+            BotCommand(
+                command='/info',
+                description=locales.get('/info_description')
             ),
         ]
     elif role == UserRole.ADMIN:
@@ -67,5 +71,9 @@ def get_main_menu_commands(locales: dict[str, str], role: UserRole):
             BotCommand(
                 command='/statistics',
                 description=locales.get('/statistics_description')
+            ),
+            BotCommand(
+                command='/info',
+                description=locales.get('/info_description')
             ),
         ]

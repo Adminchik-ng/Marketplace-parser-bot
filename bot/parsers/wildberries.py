@@ -5,73 +5,45 @@ import re
 import random
 import time
 import logging
-from tkinter import N
 from typing import Optional, Union, Tuple
-from playwright.async_api import async_playwright, Page, Browser, TimeoutError
+from playwright.async_api import async_playwright, Page, Browser
+
     
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def check_product_exists(page: Page) -> bool:
     """
-    Асинхронно ждёт появления либо сообщения об отсутствии товара,
-    либо появления любого из положительных индикаторов из списка positive_texts.
+    Проверяет наличие товара по тексту страницы visible_text.
+    Ищет тексты отсутствия товара и положительные индикаторы.
     Поиск текста — регистр-независимый.
     Возвращает False, если найден текст об отсутствии товара,
-    True — если найден хотя бы один из положительных текстов.
-    Таймаут ожидания — 5 секунд.
-    Кроме того, выводит в лог текст, по которому найдено совпадение.
+    True — если найден хотя бы один из положительных текстов,
+    Иначе возвращает True (считаем, что товар есть).
     """
-    timeout_ms = 30000
-
-    # Задача и текст для отсутствия товара
-    absence_text = "по вашему запросу ничего не найдено"
-    absence_task = asyncio.create_task(
-        page.wait_for_selector(f"text=/{absence_text}/i", timeout=timeout_ms)
-    )
-
-    positive_texts = [
-        "Артикул"
+    
+    visible_text = await page.evaluate("() => document.body.innerText")
+    
+    absence_patterns = [
+        re.compile(r"по вашему запросу ничего не найдено", re.IGNORECASE),
+        re.compile(r"нет\s*в\s*наличии", re.IGNORECASE)
     ]
+    positive_patterns = [
+        re.compile(r"артикул", re.IGNORECASE)
+    ]
+    
+    for pattern in absence_patterns:
+        if pattern.search(visible_text):
+            logger.info(f"Найден текст об отсутствии товара: '{pattern.pattern}'")
+            return False
 
-    # Создаем словарь: задача -> искомый текст
-    positive_tasks_map = {
-        asyncio.create_task(page.wait_for_selector(f"text=/{text}/i", timeout=timeout_ms)): text
-        for text in positive_texts
-    }
+    for pattern in positive_patterns:
+        if pattern.search(visible_text):
+            logger.info(f"Найден текст, подтверждающий существование товара: '{pattern.pattern}'")
+            return True
 
-    pending = {absence_task, *positive_tasks_map.keys()}
-
-    while pending:
-        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-
-        for task in done:
-            try:
-                await task
-            except TimeoutError:
-                # Не найден этот текст - просто пропускаем
-                continue
-            except Exception as e:
-                logger.error(f"Ошибка при ожидании текста: {e}", exc_info=True)
-                continue
-
-            if task is absence_task:
-                logger.info(f"Найден текст об отсутствии товара: '{absence_text}'")
-                for t in pending:
-                    t.cancel()
-                return False
-
-            if task in positive_tasks_map:
-                found_text = positive_tasks_map[task]
-                logger.info(f"Найден текст, подтверждающий существование товара: '{found_text}'")
-                for t in pending:
-                    t.cancel()
-                return True
-
-    logger.info("Не найдено подтверждающих текстов (таймаут). Считаем, что товар есть.")
+    logger.info("Не найдено подтверждающих текстов. Считаем, что товар есть.")
     return True
-
-
 
 
 async def get_discount_price_wb(page: Page) -> Union[int, str]:
@@ -79,10 +51,7 @@ async def get_discount_price_wb(page: Page) -> Union[int, str]:
     Получает цену со скидкой на уже загруженной странице.
     Если цены нет — возвращает строку "Цена не найдена".
     """
-    # Скроллим вниз для подгрузки динамического контента
-    await page.evaluate('window.scrollBy(0, document.body.scrollHeight)')
-    await asyncio.sleep(random.uniform(1.0, 2.0))
-
+    
     price_locator = page.locator(
         "span[class*='price'], div[class*='price'], ins[class*='price']"
     )
@@ -108,7 +77,7 @@ async def get_discount_price_wb(page: Page) -> Union[int, str]:
     if not valid_prices:
         return "Цена не найдена"
 
-    discount_keywords = ["final", "discount", "sale"]
+    discount_keywords = ["final", "discount", "sale", "red-price", "wallet-price"]
     discount_prices = [
         item["price"] for item in valid_prices if any(k in item["class"] for k in discount_keywords)
     ]
@@ -137,16 +106,17 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
 
 async def single_task(
     browser: Browser,
-    products_id_and_urls_and_min_price: Tuple[int, str, int],
-) -> Tuple[int, Optional[int], Optional[str], Optional[int], str]:
+    products_id_and_urls_and_min_price: Tuple[int, int, str, int, int],
+) -> Tuple[int, int, Optional[int], Optional[str], Optional[int], str, int]:
     """
     Одна задача: создаёт контекст и страницу, загружает URL,
     проверяет наличие товара и получает цену и название.
     """
-    
-    product_id = products_id_and_urls_and_min_price[0]
-    url = products_id_and_urls_and_min_price[1]
-    min_price = products_id_and_urls_and_min_price[2]
+    user_id = products_id_and_urls_and_min_price[0]
+    product_id = products_id_and_urls_and_min_price[1]
+    url = products_id_and_urls_and_min_price[2]
+    min_price = products_id_and_urls_and_min_price[3]
+    target_price = products_id_and_urls_and_min_price[4]
 
     context = await browser.new_context(
         user_agent=(
@@ -169,7 +139,7 @@ async def single_task(
     if not exists:
         logger.info("Товар не найден на маркетплейсе")
         await context.close()
-        return (product_id, None, None, min_price, "Товар не найден")
+        return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
     # Получаем цену
     price = await get_discount_price_wb(page)
@@ -182,29 +152,29 @@ async def single_task(
     if isinstance(price, int) and name:
         logger.info(f"Цена со скидкой: {price} ₽ на товар {name}")
         if min_price:
-            if price <= min_price:
-                return (product_id, price, name, price, None)
+            if int(price) <= int(min_price):
+                return (user_id, product_id, price, name, price, None, target_price, url)
             else:
-                return (product_id, price, name, min_price, None)
+                return (user_id, product_id, price, name, min_price, None, target_price, url)
         else:
-            return (product_id, price, name, price, None)
+            return (user_id, product_id, price, name, price, None, target_price, url)
         
-    elif isinstance(price, str):
+    elif isinstance(price, int):
         logger.info(f"Найдена только цена со скидкой: {price} ₽")
         if min_price:
-            if price <= min_price:
-                return (product_id, price, None, price, None)
+            if int(price) <= int(min_price):
+                return (user_id, product_id, price, None, price, None, target_price, url)
             else:
-                return (product_id, price, None, min_price, None)
+                return (user_id, product_id, price, None, min_price, None, target_price, url)
         else:
-            return (product_id, price, None, price, None)
+            return (user_id, product_id, price, None, price, None, target_price, url)
 
     else:
         logger.info("Цена не найдена")
-        return (product_id, None, None, min_price, "Товар не найден")
+        return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 
-async def process_many_wb_tasks(products_id_and_urls_and_min_prices: list[(int, str, int)], max_concurrent: int = 5) -> list[(int, int, str, int)]:
+async def process_many_wb_tasks(products_id_and_urls_and_min_prices: list[(int, int, str, int, int)], max_concurrent: int = 5) -> list[(int, int, int, str, int, str, int)]:
     """
     Запускает несколько одновременных задач по списку url и возвращает результаты.
     """
@@ -225,14 +195,16 @@ async def process_many_wb_tasks(products_id_and_urls_and_min_prices: list[(int, 
 
 
 if __name__ == "__main__":
-    urls = [
-        "https://www.wildberries.ru/catalog/96313894/detail.aspx?targetUrl=MI",
-        "https://www.wildberries.ru/catalog/185390527/detail.aspx",
-        "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG",
-        "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG",
+    products_id_and_urls_and_min_prices = [
+        # (user_id, product_id, url, min_price, target_price)
+        (1, 1, "https://www.wildberries.ru/caавыфаtalog/24678chhxhx0526/detail.aspx", 0, 0),
+        (1, 2, "https://www.wildberries.ru/catalog/246780526/detail.aspx", 0, 0),
+        (1, 3, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
+        (1, 4, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
     ]
 
     start_time = time.time()
-    asyncio.run(process_many_wb_tasks(urls, max_concurrent=10))
+    results = asyncio.run(process_many_wb_tasks(products_id_and_urls_and_min_prices, max_concurrent=10))
+    logger.info(f"Результаты: {results}")
     logger.info(f"Время выполнения: {time.time() - start_time:.2f} секунд")
 
