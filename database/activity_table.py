@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, List, Tuple
+from typing import Optional, List, Tuple
 from asyncpg import Connection
 
 logger = logging.getLogger(__name__)

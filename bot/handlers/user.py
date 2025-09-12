@@ -1,5 +1,4 @@
 import logging
-from contextlib import suppress
 from typing import Optional
 
 from aiogram import Bot, Router
@@ -9,7 +8,7 @@ from aiogram.filters import KICKED, ChatMemberUpdatedFilter, Command, CommandSta
 from aiogram.types import BotCommandScopeChat, ChatMemberUpdated, Message
 from asyncpg import Connection
 
-from bot.enums.roles import UserRole
+from enums.roles import UserRole
 from bot.keyboards.menu_button import get_main_menu_commands
 from database import db
 
@@ -87,6 +86,7 @@ async def process_user_blocked_bot(event: ChatMemberUpdated, conn: Connection):
     try:
         products = await db.products.get_user_active_products(conn=conn, user_id=user_id)
     except Exception:
+        logger.error("Failed to get user active products", exc_info=True)
         return
 
     if not products:

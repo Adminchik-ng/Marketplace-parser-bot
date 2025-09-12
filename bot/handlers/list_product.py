@@ -1,7 +1,11 @@
+from venv import logger
 from aiogram import Router, types
 from aiogram.filters import Command
 from asyncpg import Connection
 from database import db
+import logging
+
+logger = logging.getLogger(__name__)
 
 list_router = Router()
 MAX_MSG_LENGTH = 4096
@@ -30,10 +34,12 @@ async def cmd_list_products(message: types.Message, conn: Connection):
         products = await db.products.get_user_active_products(conn, user_id=user_id)
     except Exception:
         await message.answer("❌ К сожалению при отслеживании товара возникли проблемы😞.")
+        logger.error("Failed to get user active products", exc_info=True)
         return
 
     if not products:
         await message.answer("❌ У вас нет отслеживаемых товаров.")
+        logger.warning("User has no active products")
         return
 
     lines = [f"📋 Ваши товары ({len(products)}):"]

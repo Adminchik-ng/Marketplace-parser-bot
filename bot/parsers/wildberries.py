@@ -1,6 +1,4 @@
 import asyncio
-from itertools import product
-from math import prod
 import re
 import random
 import time
@@ -34,15 +32,15 @@ async def check_product_exists(page: Page) -> bool:
     
     for pattern in absence_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст об отсутствии товара: '{pattern.pattern}'")
+            logger.info(f"Finded absence text: '{pattern.pattern}'")
             return False
 
     for pattern in positive_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст, подтверждающий существование товара: '{pattern.pattern}'")
+            logger.info(f"Finded positive text: '{pattern.pattern}'")
             return True
 
-    logger.info("Не найдено подтверждающих текстов. Считаем, что товар есть.")
+    logger.info("Not finded absence or positive text, return True")
     return True
 
 
@@ -100,7 +98,7 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
         product_name = (await product_name_el.inner_text()).strip()
         return product_name
     except Exception as e:
-        logger.error(f"Ошибка при получении названия товара: {e}", exc_info=True)
+        logger.error(f"Error while getting product name: {e}", exc_info=True)
         return None
 
 
@@ -137,7 +135,7 @@ async def single_task(
     # Проверяем наличие товара
     exists = await check_product_exists(page)
     if not exists:
-        logger.info("Товар не найден на маркетплейсе")
+        logger.warning("Item not found in marketplace")
         await context.close()
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
@@ -150,7 +148,7 @@ async def single_task(
     await context.close()
 
     if isinstance(price, int) and name:
-        logger.info(f"Цена со скидкой: {price} ₽ на товар {name}")
+        logger.info(f"Price: {price} ₽, item: {name}")
         if min_price:
             if int(price) <= int(min_price):
                 return (user_id, product_id, price, name, price, None, target_price, url)
@@ -160,7 +158,7 @@ async def single_task(
             return (user_id, product_id, price, name, price, None, target_price, url)
         
     elif isinstance(price, int):
-        logger.info(f"Найдена только цена со скидкой: {price} ₽")
+        logger.info(f"Founded only price: {price} ₽")
         if min_price:
             if int(price) <= int(min_price):
                 return (user_id, product_id, price, None, price, None, target_price, url)
@@ -170,7 +168,7 @@ async def single_task(
             return (user_id, product_id, price, None, price, None, target_price, url)
 
     else:
-        logger.info("Цена не найдена")
+        logger.info("Price not found")
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 

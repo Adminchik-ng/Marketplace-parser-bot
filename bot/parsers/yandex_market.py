@@ -2,7 +2,6 @@ import asyncio
 import random
 import re
 import logging
-import sys
 from typing import Tuple, Optional
 from playwright.async_api import async_playwright, Page, BrowserContext
 from asyncio.exceptions import TimeoutError
@@ -10,12 +9,8 @@ from asyncio.exceptions import TimeoutError
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+# logger.setLevel(logging.INFO)
+
 
 
 async def check_product_existence_by_text(page: Page) -> bool:
@@ -41,15 +36,15 @@ async def check_product_existence_by_text(page: Page) -> bool:
 
     for pattern in absence_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст об отсутствии товара: '{pattern.pattern}'")
+            logger.info(f"Finded absence text: '{pattern.pattern}'")
             return False
 
     for pattern in positive_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст, подтверждающий существование товара: '{pattern.pattern}'")
+            logger.info(f"Finded positive text: '{pattern.pattern}'")
             return True
 
-    logger.info("Не найдено подтверждающих текстов. Считаем, что товар есть.")
+    logger.info("Not finded absence or positive text, return True")
     return True
 
 
@@ -163,19 +158,19 @@ async def fetch_product_data(
 
         is_exists = await check_product_existence_by_text(page)
         if not is_exists:
-            logger.info(f"Товар не существует или произошла ошибка: {url}")
+            logger.info(f"Item {product_id} not found: {url}")
             await page.close()
             return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
         product_name = await find_product_name(page)
         if not product_name:
-            logger.info(f"Название товара не найдено: {url}")
+            logger.info(f"Product name not found: {url}")
             await page.close()
             return (user_id, product_id, None, None, min_price, "Название не найдено", target_price, url)
 
         price_element = await find_price_element(page)
         if not price_element:
-            logger.info(f"Цена не найдена: {url}")
+            logger.info(f"Price element not found: {url}")
             await page.close()
             return (user_id, product_id, None, product_name, min_price, "Цена не найдена", target_price, url)
 
@@ -187,12 +182,12 @@ async def fetch_product_data(
         await page.close()
 
         if price is None:
-            logger.info(f"Не удалось распарсить цену: {url}")
+            logger.info(f"Cannot parse price: {url}")
             return (user_id, product_id, None, product_name, min_price, "Цена не распознана", target_price, url)
 
         if min_price:
             if int(price) <= int(min_price):
-                logger.info(f"Цена ниже минимальной: {url} Цена: {price}, Мин. цена: {min_price}")
+                logger.info(f"Price is less than min price: {url} Price: {price}, Min price: {min_price}")
                 return (user_id, product_id, price, product_name, price, None, target_price, url)
             else:
                 return (user_id, product_id, price, product_name, min_price, None, target_price, url)
@@ -200,7 +195,7 @@ async def fetch_product_data(
             return (user_id, product_id, price, product_name, price, None, target_price, url)
 
     except Exception as e:
-        logger.error(f"Ошибка при получении данных с Яндекс.Маркета: {url} - {e}")
+        logger.error(f"Error while fetching product data in Yandex Market: {url} - {e}")
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 

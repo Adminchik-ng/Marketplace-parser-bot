@@ -1,5 +1,5 @@
 from aiogram.types import BotCommand
-from bot.enums.roles import UserRole
+from enums.roles import UserRole
 
 
 def get_main_menu_commands(locales: dict[str, str], role: UserRole):

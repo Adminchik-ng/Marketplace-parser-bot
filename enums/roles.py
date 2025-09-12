@@ -11,6 +11,7 @@ class UserRole(str, Enum):
 class UserRow:
     id: int
     telegram_id: int
+    chat_id: int
     username: Optional[str]
     language: Optional[str]
     role: UserRole

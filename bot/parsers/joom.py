@@ -34,15 +34,15 @@ async def check_product_exists(page: Page) -> bool:
 
     for pattern in absence_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст об отсутствии товара: '{pattern.pattern}'")
+            logger.info(f"Finded absence text: '{pattern.pattern}'")
             return False
 
     for pattern in positive_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст, подтверждающий существование товара: '{pattern.pattern}'")
+            logger.info(f"Finded positive text: '{pattern.pattern}'")
             return True
 
-    logger.info("Не найдено подтверждающих текстов. Считаем, что товар есть.")
+    logger.info("Not finded absence or positive text, return True")
     return True
 
 
@@ -139,6 +139,7 @@ def parse_price(text: str) -> Optional[int]:
     try:
         return int(price_str)
     except ValueError:
+        logger.error(f"Invalid price string: '{price_str}' after parsing '{text}'")
         return None
 
 
@@ -170,7 +171,7 @@ async def single_task(
 
         exists = await check_product_exists(page)
         if not exists:
-            logger.info(f"Товар {product_id} не найден на маркетплейсе.")
+            logger.info(f"Item {product_id} not found: {url}")
             return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 
@@ -182,7 +183,7 @@ async def single_task(
 
 
         if price is not None and name:
-            logger.info(f"Цена: {price} ₽, товар: {name}")
+            logger.info(f"Price: {price} ₽, item: {name}")
             if min_price is not None:
                 if int(price) <= int(min_price):
                     return (user_id, product_id, price, name, price, None, target_price, url)
@@ -191,7 +192,7 @@ async def single_task(
             else:
                 return (user_id, product_id, price, name, price, None, target_price, url)
         elif price is not None:
-            logger.info(f"Найдена только цена: {price} ₽")
+            logger.info(f"Finded only price: {price} ₽")
             if min_price is not None:
                 if int(price) <= int(min_price):
                     return (user_id, product_id, price, None, price, None, target_price, url)
@@ -200,12 +201,12 @@ async def single_task(
             else:
                 return (user_id, product_id, price, None, price, None, target_price, url)
         else:
-            logger.info("Цена не найдена")
+            logger.info("Price not found")
             return (user_id, product_id, None, None, min_price, "Цена не найдена", target_price, url)
 
 
     except Exception as e:
-        logger.error(f"Ошибка в single_task для товара {product_id}: {e}")
+        logger.error(f"Error in single_task {product_id}: {e}")
         return (user_id, product_id, None, None, min_price, f"Ошибка обработки", target_price, url)
     finally:
         await context.close()

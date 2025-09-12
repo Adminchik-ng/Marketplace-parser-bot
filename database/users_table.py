@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Optional, Tuple, List
+from typing import Optional, Tuple, List
 from asyncpg import Connection
 
-from bot.enums.roles import UserRole, UserRow  # оставил, как есть
+from enums.roles import UserRole, UserRow
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ async def get_user(
         SELECT 
             id,
             telegram_id,
+            chat_id,
             username,
             language,
             role,
@@ -61,7 +62,7 @@ async def get_user(
         """,
         telegram_id,
     )
-    logger.info("Row is %s", row)
+    logger.info("Finded user with telegram_id %d", telegram_id)
     if row is None:
         return None
     return UserRow(*row)

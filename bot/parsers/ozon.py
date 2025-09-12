@@ -2,18 +2,11 @@ import asyncio
 import random
 import re
 import logging
-# import sys
 from typing import Tuple, Optional
-from aiogram import F
 from playwright.async_api import async_playwright, Page, BrowserContext
 
 logger = logging.getLogger(__name__)
-# logger.setLevel(logging.INFO)
-# console_handler = logging.StreamHandler(sys.stdout)
-# console_handler.setLevel(logging.INFO)
-# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-# console_handler.setFormatter(formatter)
-# logger.addHandler(console_handler)
+# logging.basicConfig(level=logging.INFO)
 
 
 import asyncio
@@ -43,15 +36,15 @@ async def check_product_existence_by_text(page: Page) -> bool:
     
     for pattern in absence_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст об отсутствии товара: '{pattern.pattern}'")
+            logger.info(f"Finded absence text: '{pattern.pattern}'")
             return False
 
     for pattern in positive_patterns:
         if pattern.search(visible_text):
-            logger.info(f"Найден текст, подтверждающий существование товара: '{pattern.pattern}'")
+            logger.info(f"Finded positive text: '{pattern.pattern}'")
             return True
 
-    logger.info("Не найдено подтверждающих текстов. Считаем, что товар есть.")
+    logger.info("Not finded absence or positive text, return True")
     return True
 
 
@@ -91,7 +84,7 @@ async def fetch_product_data(
 
         is_exists = await check_product_existence_by_text(page)
         if not is_exists:
-            logger.info(f"Товар не существует или произошла ошибка: {url}")
+            logger.info(f"Item {product_id} not found: {url}")
             await page.close()
             return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
@@ -100,7 +93,7 @@ async def fetch_product_data(
 
         price_element = await find_price_element(page)
         if not price_element:
-            logger.info(f"Цена не найдена: {url}")
+            logger.info(f"Price element not found: {url}")
             await page.close()
             return (user_id, product_id, None, product_name, min_price, "Товар не найден", target_price, url)
 
@@ -112,7 +105,7 @@ async def fetch_product_data(
         await page.close()
         if min_price:
             if int(price) <= int(min_price):
-                logger.info(f"Цена ниже минимальной: {url}")
+                logger.info(f"Price is less than min price: {url}")
                 return (user_id, product_id, price, product_name, price, None, target_price, url)
             else:
                 return (user_id, product_id, price, product_name, min_price, None, target_price, url)
@@ -120,7 +113,7 @@ async def fetch_product_data(
             return (user_id, product_id, price, product_name, price, None, target_price, url)
 
     except Exception as e:
-        logger.error(f"Ошибка при получении данных с Ozon: {url} - {e}")
+        logger.error(f"Error fetching product data in ozon: {url} - {e}")
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 

@@ -3,10 +3,10 @@ import logging
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import Message
-from bot.enums.roles import UserRole
+from enums.roles import UserRole
 from bot.filters.filters import UserRoleFilter
 from database import db
-from asyncpg import Connection  # заменено на asyncpg
+from asyncpg import Connection
 
 logger = logging.getLogger(__name__)
 admin_router = Router()
@@ -35,6 +35,7 @@ async def process_admin_statistics_command(
     
     if not any([total_users, active_today, roles_dist, new_users_percent, active_products, inactive_products, top_users]):
         await message.answer(text=locales.get("no_statistics", "Статистика отсутствует."))
+        logger.warning("Statistics not found")
         return
 
     lines = []

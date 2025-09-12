@@ -40,6 +40,7 @@ async def get_user_active_products(
         """,
         user_id,
     )
+    logger.info("Got %d active products", len(rows))
     return [
         (r["product_id"], r["product_name"], r["product_url"], r["target_price"], r["marketplace"]) 
         for r in rows
@@ -59,6 +60,7 @@ async def get_user_inactive_products(
         """,
         user_id,
     )
+    logger.info("Got %d inactive products", len(rows))
     return [
         (r["product_id"], r["product_name"], r["product_url"], r["target_price"], r["marketplace"]) 
         for r in rows
@@ -77,6 +79,7 @@ async def get_user_inactive_products_to_turn_on_after_block_bot(
         """,
         user_id,
     )
+    logger.info("Got %d inactive products after block bot", len(rows))
     return [
         (r["product_id"]) 
         for r in rows
@@ -96,6 +99,7 @@ async def get_product_by_id_and_user(
         """,
         product_id, user_id,
     )
+    logger.info("Got product by product_id=%d and user_id=%d", product_id, user_id)
     if row:
         return row["product_name"], row["product_url"]
     return None
@@ -115,7 +119,7 @@ async def delete_product_by_id(
     logger.info("Product deleted product_id=%d", product_id)
 
 
-async def get_user_active_products_with_prices_and_errors(
+async def get_user_products_with_details(
     conn: Connection,
     *,
     user_id: int,
@@ -130,6 +134,7 @@ async def get_user_active_products_with_prices_and_errors(
         user_id,
     )
     # Возвращаем список кортежей с нужными полями
+    logger.info("Got %d products", len(rows))
     return [
         (
             r["product_id"],
@@ -168,15 +173,16 @@ async def get_products_items_for_parsing(
 ) -> List[Tuple[int, str, str, int, int]]:
     rows = await conn.fetch(
         """
-        SELECT user_id,product_id, product_url, marketplace, min_price, target_price
+        SELECT user_id, product_id, product_url, marketplace, min_price, target_price
         FROM products
         WHERE is_active = TRUE AND (last_error IS NULL OR last_error = '');
         """
     )
+    logger.info("Got %d products for parsing", len(rows))
     return [(r["user_id"], r["product_id"], r["product_url"], r["marketplace"], r["min_price"], r["target_price"]) for r in rows]
 
 
-async def change_product_price_and_error(
+async def change_product_details_after_parsing(
     conn: Connection,
     *,
     product_id: int,
@@ -199,7 +205,9 @@ async def change_product_price_and_error(
         WHERE product_id = $6;
         """,
         current_price, product_name, min_price, last_error, is_active, product_id,
-    )
+    )    
+    logger.info("Product details changed for product_id=%d", product_id)
+
 
 # Количество активных товаров, сгруппированных по маркетплейсам
 async def get_active_products_by_marketplace(conn: Connection) -> Optional[List[Tuple[str, int]]]:

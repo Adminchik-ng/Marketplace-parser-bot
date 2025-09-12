@@ -1,12 +1,12 @@
 from aiogram import Bot
-# import re
+import logging
 
-# def escape_markdown(text: str) -> str:
-#     return re.sub(r'([_*[\]()~`>#+-=|{}.!])', r'\\\1', text)
+logger = logging.getLogger(__name__)
 
 async def send_message(bot: Bot, *, chat_id: int, current_price: int, product_name: str, target_price: int, url: str) -> None:
     # safe_product_name = escape_markdown(product_name)
     # Не экранируем URL, передаем как есть
+    logger.info(f"Sending message to chat {chat_id}")
     message = (
         "🎉 *Отличные новости!*\n\n"
         "⬇️ Cнизилась цена на товар:\n"

@@ -1,8 +1,13 @@
 from datetime import datetime, timedelta
+from math import log
 from aiogram import Router, types
 from aiogram.filters import Command
 
 from database import db
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 summary_router = Router()
 MAX_MSG_LENGTH = 4096
@@ -30,11 +35,12 @@ async def cmd_summary(message: types.Message, conn):
     user_id = message.from_user.id
 
     try:
-        products = await db.products.get_user_active_products_with_prices_and_errors(
+        products = await db.products.get_user_products_with_details(
             conn, user_id=user_id
         )
     except Exception:
         await message.answer("❌ К сожалению, возникли проблемы при получении данных.")
+        logger.error("Failed to get user products with details.", exc_info=True) 
         return
 
     if not products:

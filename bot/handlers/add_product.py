@@ -40,7 +40,24 @@ def is_valid_url(url: str) -> bool:
 
 # Начало добавления товара — выбираем маркетплейс
 @add_product_router.message(Command(commands=["add"]))
-async def cmd_add_start(message: types.Message, state: FSMContext):
+async def cmd_add_start(message: types.Message, state: FSMContext, *, conn: Connection):
+    user_id = message.from_user.id
+    
+    result = await db.join_query.get_user_role_and_active_products_count(conn=conn, user_id=user_id)
+
+    if result is None:
+        await message.answer("⚠️ Упс! Не удалось получить данные пользователя. Попробуйте повторить чуть позже. 🙇‍♂️")
+        await state.clear()
+        return
+
+    role, current_count = result
+    is_admin = (role == "admin") 
+
+    if not is_admin and current_count >= 5:
+        await message.answer("⚠️ Максимум — 5 товаров на пользователя. К сожалению, сейчас нельзя добавить больше, но мы уже работаем над расширением! 🙏✨")
+        await state.clear() 
+        return
+    
     msg = await message.answer(
         "Выберите маркетплейс:",
         reply_markup=marketplace_keyboard()

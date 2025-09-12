@@ -11,6 +11,10 @@ from asyncpg import Connection
 from database import db
 from ..states.states import RemoveProductStates
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 remove_product_router = Router()
 
 
@@ -73,6 +77,7 @@ async def process_remove_callback(
         product_id = int(data.split("_", 1)[1])
     except (ValueError, IndexError):
         await callback.message.answer("Некорректный выбор товара.")
+        logger.error("Incorrect product selection to remove.", exc_info=True)
         await callback.answer()
         return
 
