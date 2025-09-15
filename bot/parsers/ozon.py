@@ -8,11 +8,6 @@ from playwright.async_api import async_playwright, Page, BrowserContext
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)
 
-
-import asyncio
-from playwright.async_api import Page
-from asyncio.exceptions import TimeoutError
-
 async def check_product_existence_by_text(page: Page) -> bool:
     """
     Проверяет наличие товара по тексту страницы visible_text.
@@ -46,7 +41,6 @@ async def check_product_existence_by_text(page: Page) -> bool:
 
     logger.info("Not finded absence or positive text, return True")
     return True
-
 
 
 async def find_price_element(page: Page):

@@ -4,7 +4,8 @@ import re
 import logging
 from typing import Tuple, Optional
 from playwright.async_api import async_playwright, Page, BrowserContext
-from asyncio.exceptions import TimeoutError
+from playwright.async_api import TimeoutError
+
 
 
 # Настройка логгера
