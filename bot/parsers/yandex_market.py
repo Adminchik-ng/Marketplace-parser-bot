@@ -10,7 +10,7 @@ from playwright.async_api import TimeoutError
 
 # Настройка логгера
 logger = logging.getLogger(__name__)
-# logger.setLevel(logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 
 
 
@@ -154,7 +154,7 @@ async def fetch_product_data(
     """
     try:
         page = await context.new_page()
-        await page.goto(url, timeout=30000)
+        await page.goto(url, wait_until="load", timeout=30000)
         await asyncio.sleep(random.uniform(2, 4))
 
         is_exists = await check_product_existence_by_text(page)
@@ -264,9 +264,11 @@ async def process_many_yandex_market_tasks(
 
 if __name__ == "__main__":
     products_data = [
-        (1, 501, "https://market.yandex.ru/card/besprovodnaya-zaryadka-magnet-wireless-power-bank-a27-1-20w-10000-mach-na-apple-iphone--vneshniy-akkumulyator-magsafe--poverbank-dlya-telefona--belyy/102496890633?do-waremd5=3DX-Vylp1N01nLo5Hm6Ojg&cpc=nRQuk_UGdVh_s6ci19KHi_PFuVn__PHq_WXsmGCh1flVPmvQyWX6R7xgjFiPzAEcW-lN8pJr_4rBuIwzOU9K2iWYKuujW9pVsCTbk_5GGoDdQYcPConeE0RMPY5BYKDIfZW0g-R6xNifLQiFTKiqRzEo4vTjlCRFtGvfYJhIYSu2mjIT_zLprWbYp0cWPnQf8ptlk28uaVx6X2AN-ZbkuncWKmzz7XhpKezLafqtHuammpws9VBtmPSo5c-wHTxP&ogV=-2", 1500, 1300),
-        (2, 502, "https://market.yandex.ru/product--drugoi-tovar/0000000000", 2000, 1800),
-        (3, 503, "https://market.yandex.ru/product--esche-odin-tovar/1234567890", 1000, 900),
+    #     (1, 501, "https://market.yandex.ru/card/besprovodnaya-zaryadka-magnet-wireless-power-bank-a27-1-20w-10000-mach-na-apple-iphone--vneshniy-akkumulyator-magsafe--poverbank-dlya-telefona--belyy/102496890633?do-waremd5=3DX-Vylp1N01nLo5Hm6Ojg&cpc=nRQuk_UGdVh_s6ci19KHi_PFuVn__PHq_WXsmGCh1flVPmvQyWX6R7xgjFiPzAEcW-lN8pJr_4rBuIwzOU9K2iWYKuujW9pVsCTbk_5GGoDdQYcPConeE0RMPY5BYKDIfZW0g-R6xNifLQiFTKiqRzEo4vTjlCRFtGvfYJhIYSu2mjIT_zLprWbYp0cWPnQf8ptlk28uaVx6X2AN-ZbkuncWKmzz7XhpKezLafqtHuammpws9VBtmPSo5c-wHTxP&ogV=-2", 1500, 1300),
+    #     (2, 502, "https://market.yandex.ru/product--drugoi-tovar/0000000000", 2000, 1800),
+    #     (3, 503, "https://market.yandex.ru/product--esche-odin-tovar/1234567890", 1000, 900),
+        (3, 503, "https://market.yandex.ru/card/apple-besprovodnyye-naushniki-apple-airpods-4-s-shumopodavleniyem/103760694880?do-waremd5=-l5ou3SoJixabKtI6XVC1w&cpc=TwxnC3avKh_M_tdSv3Qc98GF6nY9nJ_BYtQrTdaac5k_pcJec2-YfIzizcRATNqrzZUdDUdxaQFSLHW11C8PvQMIGZ5WJJCpO7FApT4DUUL58J0cIfHC_EXx8hO8C6ieTtmoIHBandwxr3dPq7-747_rIOCr-Xtf8hfgpRWEM7OpjpaSRH4HHtrVL-WtdZXYSxL_V3pKsPyxe4x5FTUTWTZSNvqvmZXpw3oZ9f_r4x0w22QR6v73fMcjUUW7V13CRYDDrjl2mARWkU6itsaozF4XaNs_yrWjktD4DQW03Krpd7q7L61n3ohYDeGnLAM2amdOrHD4faQdBWO1GUb-1bL-AN1Ok_YfXAoRdohiNk24Flvrx_LyXw%2C%2C&ogV=-4", 1000, 900),
+        (3, 503, "https://market.yandex.ru/card/korpus-zalman-minitower-p10-mini-tower-plastikstalderevosteklo-5-slotov-rasshireniya/4511565227?do-waremd5=V2Ujf-g1Nqe4XPUi0HYDDQ&sponsored=1&cpc=TwxnC3avKh_qXNOvdM5o_oJXTLigqN6lWjoBAkrcWkysA9Bgaq3KZW6rP2oJcRGjw6Fo--iuT3MpMeCLSIsutNcQ13GcReVxe-y8COwhgG9-lB3CWsLZ_bGlNElJLnQrl_EJvjRuaPU-O7vqiHEZd7vGbEWDXTCVwtG6Nz84Gxhnao_egpD1zt3GTFSVi5cn3J28qnk7DwohQWxsvb5JiBInmjmTQjB30BgcNJa_9rMIIRfj8AQKFv1cxZR_UnICSIADfCk4GNhAVCJYMBfnnTz7LBBRPqegr_C3IZc9Z5UOFLmB7eLD-Z4KloDY4bt56VslozAj6Vx1etMWM2wbXBQI3iXGN4bG5sq3Imt7obktA4jZ5VegyQ%2C%2C&ogV=-4", 1000, 900),
     ]
 
     results = asyncio.run(process_many_yandex_market_tasks(products_data, max_concurrent=3))

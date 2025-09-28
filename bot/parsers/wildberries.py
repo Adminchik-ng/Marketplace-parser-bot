@@ -9,7 +9,7 @@ from playwright.async_api import async_playwright, Page, Browser
     
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
+ 
 async def check_product_exists(page: Page) -> bool:
     """
     Проверяет наличие товара по тексту страницы visible_text.
@@ -19,7 +19,7 @@ async def check_product_exists(page: Page) -> bool:
     True — если найден хотя бы один из положительных текстов,
     Иначе возвращает True (считаем, что товар есть).
     """
-    
+
     visible_text = await page.evaluate("() => document.body.innerText")
     
     absence_patterns = [
@@ -51,8 +51,8 @@ async def get_discount_price_wb(page: Page) -> Union[int, str]:
     """
     
     price_locator = page.locator(
-        "span[class*='price'], div[class*='price'], ins[class*='price']"
-    )
+    "span[class*='priceBlockWalletPrice'], span[class*='redPrice']"
+)
     count = await price_locator.count()
 
     valid_prices = []
@@ -94,7 +94,9 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
     Возвращает None если название не найдено.
     """
     try:
-        product_name_el = await page.wait_for_selector("h1", timeout=1500)
+        product_name_el = await page.wait_for_selector("h1", timeout=10000)
+        if product_name_el is None:
+            return None
         product_name = (await product_name_el.inner_text()).strip()
         return product_name
     except Exception as e:
@@ -102,10 +104,39 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
         return None
 
 
+async def wait_for_full_load(page, timeout=30000):
+    await page.wait_for_load_state("load")  # дождаться полной загрузки страницы
+
+    check_interval = 1000
+    max_checks = timeout // check_interval
+    last_html_size = 0
+    stable_iterations = 0
+    required_stable_iterations = 3
+
+    for _ in range(max_checks):
+        try:
+            html = await page.content()
+        except Exception:
+            # Если не получилось получить контент (страница все еще обновляется), ждем и повторяем
+            await page.wait_for_timeout(check_interval)
+            continue
+
+        current_size = len(html)
+        if current_size == last_html_size:
+            stable_iterations += 1
+            if stable_iterations >= required_stable_iterations:
+                break
+        else:
+            stable_iterations = 0
+
+        last_html_size = current_size
+        await page.wait_for_timeout(check_interval)
+
+
 async def single_task(
     browser: Browser,
     products_id_and_urls_and_min_price: Tuple[int, int, str, int, int],
-) -> Tuple[int, int, Optional[int], Optional[str], Optional[int], str, int]:
+) -> Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], int, str]:
     """
     Одна задача: создаёт контекст и страницу, загружает URL,
     проверяет наличие товара и получает цену и название.
@@ -125,12 +156,15 @@ async def single_task(
         java_script_enabled=True,
         locale="ru-RU",
         bypass_csp=True,
+        
     )
     page = await context.new_page()
 
     # Переход на страницу
-    await page.goto(url, wait_until="domcontentloaded")
-    await asyncio.sleep(random.uniform(2.5, 5.5))
+    await page.goto(url, wait_until="load", timeout=30000)    
+    await asyncio.sleep(random.uniform(2.0, 2.7))
+    
+    await wait_for_full_load(page)
 
     # Проверяем наличие товара
     exists = await check_product_exists(page)
@@ -172,33 +206,39 @@ async def single_task(
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
 
-async def process_many_wb_tasks(products_id_and_urls_and_min_prices: list[(int, int, str, int, int)], max_concurrent: int = 5) -> list[(int, int, int, str, int, str, int)]:
+async def process_many_wb_tasks(
+    products_id_and_urls_and_min_prices: list[Tuple[int, int, str, int, int]],
+    max_concurrent: int = 5
+) -> list[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], int, str]]:
     """
     Запускает несколько одновременных задач по списку url и возвращает результаты.
     """
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)  # здесь меняем режим открытия браузера
+        browser = await p.chromium.launch(headless=True)  # режим 'headless' можно менять
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def sem_task(url: str):
+        async def sem_task(product_info):
             async with semaphore:
-                return await single_task(browser, url)  # возвращаем результат single_task
+                return await single_task(browser, product_info)
 
-        tasks = [asyncio.create_task(sem_task(products_id_and_urls_and_min_price)) for products_id_and_urls_and_min_price in products_id_and_urls_and_min_prices]
+        tasks = [asyncio.create_task(sem_task(info)) for info in products_id_and_urls_and_min_prices]
         results = await asyncio.gather(*tasks)
 
         await browser.close()
 
-        return results  # возвращаем список результатов
+        return results
 
 
 if __name__ == "__main__":
     products_id_and_urls_and_min_prices = [
         # (user_id, product_id, url, min_price, target_price)
-        (1, 1, "https://www.wildberries.ru/caавыфаtalog/24678chhxhx0526/detail.aspx", 0, 0),
-        (1, 2, "https://www.wildberries.ru/catalog/246780526/detail.aspx", 0, 0),
-        (1, 3, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
-        (1, 4, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
+        # (1, 1, "https://www.wildberries.ru/caавыфаtalog/24678chhxhx0526/detail.aspx", 0, 0),
+        # (1, 2, "https://www.wildberries.ru/catalog/246780526/detail.aspx", 0, 0),
+        # (1, 3, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
+        # (1, 4, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
+        # (1, 4, "https://www.wildberries.ru/catalog/378236125/detail.aspx?targetUrl=SG", 0, 0),
+        (1, 4, "https://www.wildberries.ru/catalog/447895670/detail.aspx?targetUrl=MI", 0, 0),
+        (1, 4, "https://www.wildberries.ru/catalog/377844111/detail.aspx", 0, 0),
     ]
 
     start_time = time.time()

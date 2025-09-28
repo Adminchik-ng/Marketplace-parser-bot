@@ -85,9 +85,7 @@
 3. **Установить движок Playwright, браузер Chromium и дополнительные системные библиотеки**  
    Выполните команды:  
    ```bash
-   playwright install chromium
-
-   playwright install-deps
+   playwright install --with-deps chromium
    ```
 
 4. **Настроить файл окружения**  

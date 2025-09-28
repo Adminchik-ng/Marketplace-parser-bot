@@ -3,10 +3,12 @@ import random
 import re
 import logging
 from typing import Tuple, Optional
-from playwright.async_api import async_playwright, Page, BrowserContext
+# from playwright.async_api import async_playwright, Page, BrowserContext
+from undetected_playwright.async_api import async_playwright, BrowserContext, Page
 
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO)
+
 
 async def check_product_existence_by_text(page: Page) -> bool:
     """
@@ -66,15 +68,15 @@ async def fetch_product_data(
     min_price: int,
     target_price: int,
     context: BrowserContext
-) -> Tuple[int, int, Optional[int], Optional[str], int, int]:
+) -> Tuple[int, int, Optional[int], Optional[str], Optional[int],  Optional[str], int, str]:
     """
     Возвращает кортеж:
     (user_id, product_id, price_or_none, product_name_or_none, min_price, last_error_or_none, target_price, url)
     """
     try:
         page = await context.new_page()
-        await page.goto(url, timeout=30000)
-        await asyncio.sleep(random.uniform(2, 4))
+        await page.goto(url, wait_until="load", timeout=30000)
+        # await asyncio.sleep(random.uniform(2, 2.7))
 
         is_exists = await check_product_existence_by_text(page)
         if not is_exists:
@@ -82,7 +84,7 @@ async def fetch_product_data(
             await page.close()
             return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
 
-        await page.wait_for_selector("h1", timeout=30000)
+        await page.wait_for_selector("h1", state='visible', timeout=30000)
         product_name = (await page.inner_text("h1")).strip()
 
         price_element = await find_price_element(page)
@@ -97,7 +99,7 @@ async def fetch_product_data(
         price = int(price_match.group(1)) if price_match else None
 
         await page.close()
-        if min_price:
+        if min_price and price:
             if int(price) <= int(min_price):
                 logger.info(f"Price is less than min price: {url}")
                 return (user_id, product_id, price, product_name, price, None, target_price, url)
@@ -138,14 +140,21 @@ async def process_many_ozon_tasks(
             "--disable-infobars"
         ]
 
-        browser = await p.chromium.launch(headless=True, args=chromium_args)
+        browser = await p.chromium.launch(
+            headless=True,  
+            args=chromium_args)
+        
         context = await browser.new_context(
-            user_agent=f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36",
-            viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
-            locale="ru-RU",
-            java_script_enabled=True,
-        )
+        user_agent=(
+            f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36"
+        ),
+        viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
+        java_script_enabled=True,
+        locale="ru-RU",
+        bypass_csp=True,
+        
+    )
 
         await context.add_init_script(
             """
@@ -155,7 +164,7 @@ async def process_many_ozon_tasks(
             Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
             """
         )
-
+        
         sem = asyncio.Semaphore(max_concurrent)
 
         tasks = []
@@ -176,7 +185,10 @@ async def process_many_ozon_tasks(
 
 if __name__ == "__main__":
     products_data = [
-        (1, 101, "https://www.ozon.ru/product/futbolka-samo-1622855018/?at=PjtJ8GLkYcX9J8EWuBLoYjJCLRkrr6sM50ok3T9MG6KO", 500, 450),
+        (1, 101, "https://www.ozon.ru/product/sumka-kross-bodi-na-plecho-1962754411/", 500, 450),
+        (1, 101, "https://www.ozon.ru/product/sumka-kross-bodi-na-plecho-1962754411/", 500, 450),
+        (1, 101, "https://www.ozon.ru/product/sumka-kross-bodi-na-plecho-1962754411/", 500, 450),
+        (1, 101, "https://www.ozon.ru/product/sumka-kross-bodi-na-plecho-1962754411/", 500, 450),
         (2, 102, "https://www.ozon.ru/product/your-product-url-2/", 300, 280),
         (3, 103, "https://ozon.ru/t/cBGw8Nk", 1000, 900),
     ]

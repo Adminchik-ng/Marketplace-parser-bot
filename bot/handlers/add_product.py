@@ -22,13 +22,13 @@ VALID_MARKETPLACES = {"wildberries", "ozon", "yandex", "joom"}
 URL_REGEX = re.compile(
     r'^https?://(?:www\.)?'
     r'('
-    r'wildberries\.ru|'           # Wildberries
-    r'ozon\.ru|'                 # Ozon
-    r'((?:[\w-]+\.)*yandex\.ru)|' # yandex.ru с любыми поддоменами
-    r'yandex\.market|'           # Яндекс.Маркет
-    r'joom\.(com|ru)'
+    r'wildberries\.ru|'              # Wildberries
+    r'ozon\.ru|'                    # Ozon
+    r'((?:[\w-]+\.)*yandex\.ru)|'  # yandex.ru с любыми поддоменами
+    r'yandex\.market|'              # Яндекс.Маркет
+    r'((?:[\w-]+\.)*joom\.(com|ru))'
     r')'
-    r'[/\w\-\._~:/?#\[\]@!$&\'()*+,;=%]*$', # Остальная часть URL
+    r'[/\w\-\._~:/?#\[\]@!$&\'()*+,;=%]*$',  # Остальная часть URL
     re.IGNORECASE
 )
 

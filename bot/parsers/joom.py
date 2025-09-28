@@ -59,10 +59,11 @@ async def find_product_name(page: Page) -> Optional[str]:
     for selector in selectors:
         try:
             element = await page.wait_for_selector(selector, timeout=2000)
-            text = (await element.text_content()) or ""
-            text = text.strip()
-            if text and len(text) > 5:
-                return text
+            if element:
+                text = (await element.text_content()) or ""
+                text = text.strip()
+                if text and len(text) > 5:
+                    return text
         except PlaywrightTimeoutError:
             continue
 
@@ -142,6 +143,33 @@ def parse_price(text: str) -> Optional[int]:
         logger.error(f"Invalid price string: '{price_str}' after parsing '{text}'")
         return None
 
+async def wait_for_full_load(page, timeout=30000):
+    await page.wait_for_load_state("load")  # дождаться полной загрузки страницы
+
+    check_interval = 1000
+    max_checks = timeout // check_interval
+    last_html_size = 0
+    stable_iterations = 0
+    required_stable_iterations = 3
+
+    for _ in range(max_checks):
+        try:
+            html = await page.content()
+        except Exception:
+            # Если не получилось получить контент (страница все еще обновляется), ждем и повторяем
+            await page.wait_for_timeout(check_interval)
+            continue
+
+        current_size = len(html)
+        if current_size == last_html_size:
+            stable_iterations += 1
+            if stable_iterations >= required_stable_iterations:
+                break
+        else:
+            stable_iterations = 0
+
+        last_html_size = current_size
+        await page.wait_for_timeout(check_interval)
 
 
 async def single_task(
@@ -161,13 +189,16 @@ async def single_task(
         locale="ru-RU",
         bypass_csp=True,
     )
+    
+    
     page = await context.new_page()
 
 
     try:
-        await page.goto(url, wait_until="domcontentloaded")
+        await page.goto(url, wait_until="load", timeout=30000)    
         await asyncio.sleep(random.uniform(2.5, 5.5))  # задержка для эмуляции поведения пользователя
 
+        await wait_for_full_load(page)
 
         exists = await check_product_exists(page)
         if not exists:
@@ -215,7 +246,7 @@ async def single_task(
 async def process_many_joom_tasks(
     products_info: List[Tuple[int, int, str, Optional[int], Optional[int]]],
     max_concurrent: int = 5
-) -> List[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], Optional[int]]]:
+) -> List[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], Optional[int], Optional[str]]]:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -234,7 +265,7 @@ async def process_many_joom_tasks(
 
 if __name__ == "__main__":
     products_to_check = [
-        # (1, 6545, "https://www.joom.ru/ru/products/6545eaeed9587a019dacd12e?variant_id=6545eaeed9587a949dacd130", 1000, 1200),
+        (1, 6545, "https://www.joom.ru/ru/products/6720faa03b1958015bbfba65?variant_id=6720faa03b1958b85bbfba74", 1000, 1200),
         # (1, 6545, "https://www.joom.ru/ru/products/6545eaeed9587a019dacd12e", 1000, 1200),
         # (1, 6545, "https://www.joom.ru/ru/products/6545eaeed9587a019dacd12e", 1000, 1200),
         # (2, 7890, "https://www.joom.ru/ru/products/another-product-url", 500, 700),
