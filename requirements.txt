@@ -19,6 +19,7 @@ marshmallow==4.0.0
 multidict==6.6.3
 packaging==25.0
 playwright==1.55.0
+playwright-stealth==2.0.0
 pluggy==1.6.0
 propcache==0.3.2
 psycopg-pool==3.2.6
@@ -31,8 +32,8 @@ pytest-asyncio==1.1.0
 python-dotenv==1.1.1
 redis==6.3.0
 typing-inspection==0.4.1
-typing_extensions==4.14.1
+typing_extensions==4.15.0
 tzdata==2025.2
 tzlocal==5.3.1
-undetected-playwright-patch==1.40.0.post1700587210000
+xvfbwrapper==0.2.14
 yarl==1.20.1
