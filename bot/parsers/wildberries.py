@@ -4,8 +4,9 @@ import random
 import time
 import logging
 from typing import Optional, Union, Tuple
-from playwright.async_api import async_playwright, Page, Browser
-
+from playwright.async_api import async_playwright, Page, BrowserContext
+from xvfbwrapper import Xvfb
+from playwright_stealth import Stealth
     
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -94,7 +95,7 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
     Возвращает None если название не найдено.
     """
     try:
-        product_name_el = await page.wait_for_selector("h1", timeout=10000)
+        product_name_el = await page.wait_for_selector("h1", timeout=15000)
         if product_name_el is None:
             return None
         product_name = (await product_name_el.inner_text()).strip()
@@ -134,30 +135,19 @@ async def wait_for_full_load(page, timeout=30000):
 
 
 async def single_task(
-    browser: Browser,
-    products_id_and_urls_and_min_price: Tuple[int, int, str, int, int],
+    context: BrowserContext,
+    product_info: Tuple[int, int, str, int, int],
 ) -> Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], int, str]:
     """
     Одна задача: создаёт контекст и страницу, загружает URL,
     проверяет наличие товара и получает цену и название.
     """
-    user_id = products_id_and_urls_and_min_price[0]
-    product_id = products_id_and_urls_and_min_price[1]
-    url = products_id_and_urls_and_min_price[2]
-    min_price = products_id_and_urls_and_min_price[3]
-    target_price = products_id_and_urls_and_min_price[4]
+    user_id = product_info[0]
+    product_id = product_info[1]
+    url = product_info[2]
+    min_price = product_info[3]
+    target_price = product_info[4]
 
-    context = await browser.new_context(
-        user_agent=(
-            f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
-        java_script_enabled=True,
-        locale="ru-RU",
-        bypass_csp=True,
-        
-    )
     page = await context.new_page()
 
     # Переход на страницу
@@ -178,8 +168,6 @@ async def single_task(
 
     # Получаем название
     name = await get_wb_product_name(page)
-
-    await context.close()
 
     if isinstance(price, int) and name:
         logger.info(f"Price: {price} ₽, item: {name}")
@@ -207,26 +195,75 @@ async def single_task(
 
 
 async def process_many_wb_tasks(
-    products_id_and_urls_and_min_prices: list[Tuple[int, int, str, int, int]],
+    marketplace_tasks: list[Tuple[int, int, str, int, int]],
     max_concurrent: int = 5
 ) -> list[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], int, str]]:
     """
     Запускает несколько одновременных задач по списку url и возвращает результаты.
     """
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)  # режим 'headless' можно менять
-        semaphore = asyncio.Semaphore(max_concurrent)
+    
+    stealth = Stealth()
 
-        async def sem_task(product_info):
-            async with semaphore:
-                return await single_task(browser, product_info)
+    # Создаем виртуальный дисплей Xvfb
+    xvfb = Xvfb(width=1280, height=720)
+    xvfb.start()
 
-        tasks = [asyncio.create_task(sem_task(info)) for info in products_id_and_urls_and_min_prices]
-        results = await asyncio.gather(*tasks)
+    try:
+        async with stealth.use_async(async_playwright()) as p:
+            
+            chromium_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-infobars"
+            ]
 
-        await browser.close()
+            browser = await p.chromium.launch(
+                headless=False,
+                args=chromium_args)
 
-        return results
+            context = await browser.new_context(
+                user_agent=(
+                    f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
+                java_script_enabled=True,
+                locale="ru-RU",
+                bypass_csp=True,
+            )
+            
+            await context.add_init_script(
+                """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.navigator.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
+                """
+            )
+            # Применяем stealth ко всему контексту
+            await stealth.apply_stealth_async(context)
+           
+            semaphore = asyncio.Semaphore(max_concurrent)
+
+            async def sem_task(product_info):
+                async with semaphore:
+                    return await single_task(context=context, product_info=product_info)
+
+            tasks = [asyncio.create_task(sem_task(info)) for info in marketplace_tasks]
+            results = await asyncio.gather(*tasks)
+
+
+            await context.close()
+            await browser.close()
+
+            return results
+
+    finally:
+        xvfb.stop()
+
 
 
 if __name__ == "__main__":

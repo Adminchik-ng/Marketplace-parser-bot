@@ -3,9 +3,11 @@ import re
 import random
 import logging
 from typing import Optional, Tuple, List
-from playwright.async_api import async_playwright, Page, Browser, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright, Page, BrowserContext, TimeoutError as PlaywrightTimeoutError
+from xvfbwrapper import Xvfb
+from playwright_stealth import Stealth
 
-# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -173,26 +175,12 @@ async def wait_for_full_load(page, timeout=30000):
 
 
 async def single_task(
-    browser: Browser,
+    context: BrowserContext,
     product_info: Tuple[int, int, str, Optional[int], Optional[int]]
 ) -> Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], Optional[int], Optional[str]]:
     user_id, product_id, url, min_price, target_price = product_info
 
-
-    context = await browser.new_context(
-        user_agent=(
-            f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            f"(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-        ),
-        viewport={"width": 1300, "height": 1000},
-        java_script_enabled=True,
-        locale="ru-RU",
-        bypass_csp=True,
-    )
-    
-    
     page = await context.new_page()
-
 
     try:
         await page.goto(url, wait_until="load", timeout=30000)    
@@ -239,28 +227,73 @@ async def single_task(
     except Exception as e:
         logger.error(f"Error in single_task {product_id}: {e}")
         return (user_id, product_id, None, None, min_price, f"Ошибка обработки", target_price, url)
-    finally:
-        await context.close()
+        
 
 
 async def process_many_joom_tasks(
-    products_info: List[Tuple[int, int, str, Optional[int], Optional[int]]],
+    marketplace_tasks: List[Tuple[int, int, str, Optional[int], Optional[int]]],
     max_concurrent: int = 5
 ) -> List[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], Optional[int], Optional[str]]]:
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        semaphore = asyncio.Semaphore(max_concurrent)
+   
+    stealth = Stealth()
 
-        async def sem_task(product_info):
-            async with semaphore:
-                return await single_task(browser, product_info)
+    # Создаем виртуальный дисплей Xvfb
+    xvfb = Xvfb(width=1280, height=720)
+    xvfb.start()
+    
+    try:
+        async with stealth.use_async(async_playwright()) as p:
+            chromium_args = [
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-infobars"
+            ]
+            
+            browser = await p.chromium.launch(
+                headless=False,
+                args=chromium_args)
+            
+            context = await browser.new_context(
+                user_agent=(
+                    f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                    f"(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1300, "height": 1000},
+                java_script_enabled=True,
+                locale="ru-RU",
+                bypass_csp=True,
+            )
+    
+            await context.add_init_script(
+                """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.navigator.chrome = { runtime: {} };
+                Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+                Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
+                """
+            )
+            # Применяем stealth ко всему контексту
+            await stealth.apply_stealth_async(context)
+            
+            semaphore = asyncio.Semaphore(max_concurrent)
 
-        tasks = [asyncio.create_task(sem_task(info)) for info in products_info]
-        results = await asyncio.gather(*tasks)
+            async def sem_task(product_info):
+                async with semaphore:
+                    return await single_task(context=context, product_info=product_info)
 
-        await browser.close()
+            tasks = [asyncio.create_task(sem_task(info)) for info in marketplace_tasks]
+            results = await asyncio.gather(*tasks)
 
-        return results
+            await context.close()
+            await browser.close()
+
+            return results
+    finally:
+        pass
+        xvfb.stop()
 
 
 if __name__ == "__main__":

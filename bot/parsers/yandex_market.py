@@ -3,9 +3,11 @@ import random
 import re
 import logging
 from typing import Tuple, Optional
+from aiogram import F
 from playwright.async_api import async_playwright, Page, BrowserContext
 from playwright.async_api import TimeoutError
-
+from xvfbwrapper import Xvfb
+from playwright_stealth import Stealth
 
 
 # Настройка логгера
@@ -214,52 +216,65 @@ async def fetch_product_data_with_semaphore(
 
 
 async def process_many_yandex_market_tasks(
-    products_data: list[Tuple[int, int, str, int, int]],
+    marketplace_tasks: list[Tuple[int, int, str, int, int]],
     max_concurrent: int = 3
 ):
-    async with async_playwright() as p:
-        chromium_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-extensions",
-            "--disable-infobars"
-        ]
 
-        browser = await p.chromium.launch(headless=True, args=chromium_args)
-        context = await browser.new_context(
-            user_agent=f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                       f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36",
-            viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
-            locale="ru-RU",
-            java_script_enabled=True,
-        )
+    stealth = Stealth()
 
-        await context.add_init_script(
-            """
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            window.navigator.chrome = { runtime: {} };
-            Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-            Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
-            """
-        )
+    # Создаем виртуальный дисплей Xvfb
+    xvfb = Xvfb(width=1280, height=720)
+    xvfb.start()
 
-        sem = asyncio.Semaphore(max_concurrent)
+    try:
+            async with stealth.use_async(async_playwright()) as p:
+                chromium_args = [
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-extensions",
+                    "--disable-infobars"
+                ]
 
-        tasks = [
-            fetch_product_data_with_semaphore(
-                sem, user_id, product_id, url, min_price, target_price, context
-            )
-            for user_id, product_id, url, min_price, target_price in products_data
-        ]
+                browser = await p.chromium.launch(headless=False, args=chromium_args)
+                context = await browser.new_context(
+                    user_agent=f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                            f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36",
+                    viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
+                    locale="ru-RU",
+                    java_script_enabled=True,
+                )
 
-        results = await asyncio.gather(*tasks)
+                await context.add_init_script(
+                    """
+                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                    window.navigator.chrome = { runtime: {} };
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
+                    """
+                )
+                # Применяем stealth ко всему контексту
+                await stealth.apply_stealth_async(context)
+                
+                sem = asyncio.Semaphore(max_concurrent)
 
-        await context.close()
-        await browser.close()
+                tasks = [
+                    fetch_product_data_with_semaphore(
+                        sem, user_id, product_id, url, min_price, target_price, context
+                    )
+                    for user_id, product_id, url, min_price, target_price in marketplace_tasks
+                ]
 
-        return results
+                results = await asyncio.gather(*tasks)
+
+                await context.close()
+                await browser.close()
+
+                return results
+
+    finally:
+        xvfb.stop()
 
 
 if __name__ == "__main__":

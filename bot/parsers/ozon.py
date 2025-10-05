@@ -8,8 +8,6 @@ from xvfbwrapper import Xvfb
 from playwright_stealth import Stealth
 
 logger = logging.getLogger(__name__)
-
-
 # logging.basicConfig(level=logging.INFO)
 
 
@@ -130,7 +128,7 @@ async def fetch_product_data_with_semaphore(
 
 
 async def process_many_ozon_tasks(
-        products_data: list[Tuple[int, int, str, int, int]],
+        marketplace_tasks: list[Tuple[int, int, str, int, int]],
         max_concurrent: int = 3
 ):
 
@@ -166,7 +164,6 @@ async def process_many_ozon_tasks(
                 java_script_enabled=True,
                 locale="ru-RU",
                 bypass_csp=True,
-
             )
 
             await context.add_init_script(
@@ -183,7 +180,7 @@ async def process_many_ozon_tasks(
             sem = asyncio.Semaphore(max_concurrent)
 
             tasks = []
-            for user_id, product_id, url, min_price, target_price in products_data:
+            for user_id, product_id, url, min_price, target_price in marketplace_tasks:
                 tasks.append(
                     fetch_product_data_with_semaphore(
                         sem, user_id, product_id, url, min_price, target_price, context
