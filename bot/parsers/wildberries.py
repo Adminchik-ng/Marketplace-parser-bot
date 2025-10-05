@@ -4,9 +4,7 @@ import random
 import time
 import logging
 from typing import Optional, Union, Tuple
-from playwright.async_api import async_playwright, Page, BrowserContext
-from xvfbwrapper import Xvfb
-from playwright_stealth import Stealth
+from playwright.async_api import Page, BrowserContext
     
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,7 +93,7 @@ async def get_wb_product_name(page: Page) -> Optional[str]:
     Возвращает None если название не найдено.
     """
     try:
-        product_name_el = await page.wait_for_selector("h1", timeout=15000)
+        product_name_el = await page.wait_for_selector("h3", timeout=15000)
         if product_name_el is None:
             return None
         product_name = (await product_name_el.inner_text()).strip()
@@ -147,123 +145,80 @@ async def single_task(
     url = product_info[2]
     min_price = product_info[3]
     target_price = product_info[4]
-
-    page = await context.new_page()
-
-    # Переход на страницу
-    await page.goto(url, wait_until="load", timeout=30000)    
-    await asyncio.sleep(random.uniform(2.0, 2.7))
     
-    await wait_for_full_load(page)
+    try:
+        page = await context.new_page()
 
-    # Проверяем наличие товара
-    exists = await check_product_exists(page)
-    if not exists:
-        logger.warning("Item not found in marketplace")
-        await context.close()
-        return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
-
-    # Получаем цену
-    price = await get_discount_price_wb(page)
-
-    # Получаем название
-    name = await get_wb_product_name(page)
-
-    if isinstance(price, int) and name:
-        logger.info(f"Price: {price} ₽, item: {name}")
-        if min_price:
-            if int(price) <= int(min_price):
-                return (user_id, product_id, price, name, price, None, target_price, url)
-            else:
-                return (user_id, product_id, price, name, min_price, None, target_price, url)
-        else:
-            return (user_id, product_id, price, name, price, None, target_price, url)
+        # Переход на страницу
+        await page.goto(url, wait_until="load", timeout=30000)    
+        await asyncio.sleep(random.uniform(2.0, 2.7))
         
-    elif isinstance(price, int):
-        logger.info(f"Founded only price: {price} ₽")
-        if min_price:
-            if int(price) <= int(min_price):
-                return (user_id, product_id, price, None, price, None, target_price, url)
-            else:
-                return (user_id, product_id, price, None, min_price, None, target_price, url)
-        else:
-            return (user_id, product_id, price, None, price, None, target_price, url)
+        await wait_for_full_load(page)
 
-    else:
-        logger.info("Price not found")
+        # Проверяем наличие товара
+        exists = await check_product_exists(page)
+        if not exists:
+            logger.warning("Item not found in marketplace")
+            return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
+
+        # Получаем цену
+        price = await get_discount_price_wb(page)
+
+        # Получаем название
+        name = await get_wb_product_name(page)
+        name = name or "название товара не найдено"
+
+        if isinstance(price, int) and name:
+            logger.info(f"Price: {price} ₽, item: {name}")
+            if min_price:
+                if int(price) <= int(min_price):
+                    return (user_id, product_id, price, name, price, None, target_price, url)
+                else:
+                    return (user_id, product_id, price, name, min_price, None, target_price, url)
+            else:
+                return (user_id, product_id, price, name, price, None, target_price, url)
+            
+        elif isinstance(price, int):
+            logger.info(f"Founded only price: {price} ₽")
+            if min_price:
+                if int(price) <= int(min_price):
+                    return (user_id, product_id, price, None, price, None, target_price, url)
+                else:
+                    return (user_id, product_id, price, None, min_price, None, target_price, url)
+            else:
+                return (user_id, product_id, price, None, price, None, target_price, url)
+
+        else:
+            logger.info("Price not found")
+            return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
+    
+    except Exception as e:
+        logger.error(f"Error fetching product data in wildberries: {url} - {e}")
         return (user_id, product_id, None, None, min_price, "Товар не найден", target_price, url)
+    
+    finally:
+        await page.close()
 
 
 async def process_many_wb_tasks(
     marketplace_tasks: list[Tuple[int, int, str, int, int]],
+    context: BrowserContext,
     max_concurrent: int = 5
 ) -> list[Tuple[int, int, Optional[int], Optional[str], Optional[int], Optional[str], int, str]]:
     """
     Запускает несколько одновременных задач по списку url и возвращает результаты.
     """
-    
-    stealth = Stealth()
-
-    # Создаем виртуальный дисплей Xvfb
-    xvfb = Xvfb(width=1280, height=720)
-    xvfb.start()
-
-    try:
-        async with stealth.use_async(async_playwright()) as p:
-            
-            chromium_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-infobars"
-            ]
-
-            browser = await p.chromium.launch(
-                headless=False,
-                args=chromium_args)
-
-            context = await browser.new_context(
-                user_agent=(
-                    f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    f"(KHTML, like Gecko) Chrome/{random.randint(100, 115)}.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": random.randint(1000, 1400), "height": random.randint(800, 1200)},
-                java_script_enabled=True,
-                locale="ru-RU",
-                bypass_csp=True,
-            )
-            
-            await context.add_init_script(
-                """
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                window.navigator.chrome = { runtime: {} };
-                Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
-                Object.defineProperty(navigator, 'languages', { get: () => ['ru-RU', 'ru'] });
-                """
-            )
-            # Применяем stealth ко всему контексту
-            await stealth.apply_stealth_async(context)
            
-            semaphore = asyncio.Semaphore(max_concurrent)
+    semaphore = asyncio.Semaphore(max_concurrent)
 
-            async def sem_task(product_info):
-                async with semaphore:
-                    return await single_task(context=context, product_info=product_info)
+    async def sem_task(product_info):
+        async with semaphore:
+            return await single_task(context=context, product_info=product_info)
 
-            tasks = [asyncio.create_task(sem_task(info)) for info in marketplace_tasks]
-            results = await asyncio.gather(*tasks)
+    tasks = [asyncio.create_task(sem_task(info)) for info in marketplace_tasks]
+    results = await asyncio.gather(*tasks)
 
-
-            await context.close()
-            await browser.close()
-
-            return results
-
-    finally:
-        xvfb.stop()
-
+    return results
 
 
 if __name__ == "__main__":
