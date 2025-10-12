@@ -150,7 +150,7 @@ async def single_task(
         page = await context.new_page()
 
         # Переход на страницу
-        await page.goto(url, wait_until="load", timeout=30000)    
+        await page.goto(url, wait_until="load", timeout=60000)    
         await asyncio.sleep(random.uniform(2.0, 2.7))
         
         await wait_for_full_load(page)

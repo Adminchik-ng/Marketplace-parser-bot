@@ -134,7 +134,7 @@ async def on_startup():
     """
     Запуск планировщика задач.
     """
-    scheduler.add_job(scheduled_task, 'interval', minutes=2)
+    scheduler.add_job(scheduled_task, 'interval', minutes=120)
     scheduler.start()
 
 #для ручного просмотра и остановки процесса

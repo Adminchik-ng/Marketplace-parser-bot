@@ -143,6 +143,33 @@ def parse_price(text: str) -> Optional[int]:
         logger.error(f"Invalid price string: '{price_str}' after parsing '{text}'")
         return None
 
+async def wait_for_full_load(page, timeout=30000):
+    await page.wait_for_load_state("load")  # ждать полной загрузки страницы
+
+    check_interval = 1000
+    max_checks = timeout // check_interval
+    last_html_size = 0
+    stable_iterations = 0
+    required_stable_iterations = 3
+
+    for _ in range(max_checks):
+        try:
+            html = await page.content()
+        except Exception:
+            # Если не удалось получить контент (страница всё ещё обновляется), ждём и повторяем
+            await page.wait_for_timeout(check_interval)
+            continue
+
+        current_size = len(html)
+        if current_size == last_html_size:
+            stable_iterations += 1
+            if stable_iterations >= required_stable_iterations:
+                break
+        else:
+            stable_iterations = 0
+
+        last_html_size = current_size
+        await page.wait_for_timeout(check_interval)
 
 async def single_task(
     context: BrowserContext,
@@ -153,9 +180,10 @@ async def single_task(
     page = await context.new_page()
 
     try:
-        await page.goto(url, wait_until="load", timeout=60000)    
-        await asyncio.sleep(random.uniform(2.5, 5.5))  # задержка для эмуляции поведения пользователя
+        await page.goto(url, wait_until="load", timeout=60000)     # задержка для эмуляции поведения пользователя
 
+        await wait_for_full_load(page)
+        
         exists = await check_product_exists(page)
         if not exists:
             logger.info(f"Item {product_id} not found: {url}")

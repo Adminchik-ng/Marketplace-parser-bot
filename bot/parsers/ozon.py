@@ -75,7 +75,7 @@ async def fetch_product_data(
     """
     try:
         page = await context.new_page()
-        await page.goto(url, wait_until="load", timeout=30000)
+        await page.goto(url, wait_until="load", timeout=60000)
         # await asyncio.sleep(random.uniform(2, 2.7))
 
         is_exists = await check_product_existence_by_text(page)
